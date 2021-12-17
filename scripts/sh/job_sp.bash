@@ -490,6 +490,14 @@ if [[ $do_job != 0 ]]; then
     "*"
   )
 
+  for n in "${!NAMES[@]}"; do
+      name=${NAMES[$n]}
+      dir=${DIRS[$n]}
+      pattern=${PATTERNS[$n]}
+      upl=$output_rel/$dir/$pattern
+      upload "$name" "$ID" "$VERBOSE" "${upl[@]}"
+  done
+
   # PSF validation
   pattern="validation_psf-*"
   if [ "$psf" == "psfex" ]; then
@@ -502,12 +510,5 @@ if [[ $do_job != 0 ]]; then
   upl=$output_rel/$dir/$pattern
   upload "$name" "$ID" "$VERBOSE" "${upl[@]}"
 
-  for n in "${!NAMES[@]}"; do
-      name=${NAMES[$n]}
-      dir=${DIRS[$n]}
-      pattern=${PATTERNS[$n]}
-      upl=$output_rel/$dir/$pattern
-      upload "$name" "$ID" "$VERBOSE" "${upl[@]}"
-  done
 
 fi

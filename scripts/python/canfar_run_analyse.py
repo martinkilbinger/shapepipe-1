@@ -76,6 +76,8 @@ def parse_options(p_def):
          help='input job file, default=\'{}\''.format(p_def.input_job))
     parser.add_option('-o', '--output_fail', dest='output_fail', type='string',
          help='output file for failed jobs, none if not given')
+    parser.add_option('-s', '--output_success', dest='output_success', type='string',
+         help='output file for successful jobs, none if not given')
 
     parser.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbose output')
 
@@ -266,12 +268,10 @@ def output(status):
     print('## Summary')
     print('# Nb: status (code)') 
     for s in hist:
-        #print('{:2d}, {}: {}'.format(int(s[0]), s[1], hist[s]))
         print('{:6d}: {} ({})'.format(hist[s], s[1], int(s[0])), end='')
         if len(s) == 4:
             print('; {} ({})'.format(s[3], int(s[2])), end='')
         print()
-        #print(hist[s], s)
 
 
 def output_failed(output_fail, status):
@@ -281,6 +281,16 @@ def output_failed(output_fail, status):
         with open(output_fail, 'w') as f_out:
             for tile_num in status.keys():
                 if status[tile_num][0] == res_noout or status[tile_num][0] == res_unk:
+                    print(tile_num, file=f_out)
+
+
+def output_succeeded(output_success, status):
+
+    if output_success:
+
+        with open(output_success, 'w') as f_out:
+            for tile_num in status.keys():
+                if status[tile_num][0] == res_ok:
                     print(tile_num, file=f_out)
             
 
@@ -314,9 +324,14 @@ def main(argv=None):
                     continue
                 status[tile_num] = get_status(tile_num)
 
+    # Print status to terminal
     output(status)
 
+    # Write IDs of failed tiles to file
     output_failed(param.output_fail, status)
+
+    # Write IDs of successful tiles to file 
+    output_succeeded(param.output_success, status)
 
 
 if __name__ == "__main__":

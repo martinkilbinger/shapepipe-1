@@ -58,7 +58,7 @@ def in2out_pattern(number):
     """
     # replace dots ('.') with dashes ('-') to avoid confusion
     # with file extension delimiters
-    number_final = re.sub(r'\.', '-', number)
+    number_final = re.sub(r'\.', '', number)
 
     # remove letters in number
     number_final = re.sub('[a-zA-Z]', '', number_final)

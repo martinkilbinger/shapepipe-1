@@ -1150,6 +1150,8 @@ class FileHandler(object):
             self.setpath(self._tmp_dir, f'nums_{pattern}_{ext}.npy')
             for pattern, ext in zip(pattern_list, ext_list)
         ]
+        os.mkdir(f'{self._tmp_dir}/nums_tiles')
+        os.mkdir(f'{self._tmp_dir}/nums_tiles/exposure_lists')
         match_mmap = self.setpath(self._tmp_dir, 'matching_num_patterns.npy')
         self.process_mmap = self.setpath(self._tmp_dir, 'process_list.npy')
 

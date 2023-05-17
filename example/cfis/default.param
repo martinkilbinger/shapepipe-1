@@ -1,5 +1,5 @@
-NUMBER                   #Running object number                                    
-EXT_NUMBER               #FITS extension number                                    
+NUMBER                   #Running object number
+EXT_NUMBER               #FITS extension number
 
 FLUX_AUTO                #Flux within a Kron-like elliptical aperture               [count]
 FLUXERR_AUTO             #RMS error for AUTO flux                                   [count]
@@ -14,7 +14,7 @@ FLUXERR_APER(1)
 
 FLUX_RADIUS              #Fraction-of-light radii                                   [pixel]
 
-SNR_WIN                  #Gaussian-weighted SNR                                    
+SNR_WIN                  #Gaussian-weighted SNR
 
 BACKGROUND               #Background at centroid position                           [count]
 THRESHOLD                #Detection threshold above background                      [count]
@@ -44,25 +44,25 @@ XYWIN_IMAGE              #Windowed covariance between x and y                   
 ERRX2WIN_IMAGE           #Variance of windowed pos along x                          [pixel**2]
 ERRY2WIN_IMAGE           #Variance of windowed pos along y                          [pixel**2]
 ERRXYWIN_IMAGE           #Covariance of windowed pos between x and y                [pixel**2]
-              
+
 MU_THRESHOLD             #Analysis threshold above background                       [mag * arcsec**(-2)]
 MU_MAX                   #Peak surface brightness above background                  [mag * arcsec**(-2)]
 
-FLAGS                    #Extraction flags                            
-FLAGS_WIN                #Flags for WINdowed parameters                
+FLAGS                    #Extraction flags
+FLAGS_WIN                #Flags for WINdowed parameters
 
 #!!! REQUIRE FLAG_IMAGE !!!
-IMAFLAGS_ISO             #FLAG-image flags OR'ed over the iso. profile  !!! REQUIRE FLAG_IMAGE !!!            
+IMAFLAGS_ISO             #FLAG-image flags OR'ed over the iso. profile  !!! REQUIRE FLAG_IMAGE !!!
 
 FWHM_IMAGE               #FWHM assuming a gaussian core                             [pixel]
 FWHM_WORLD               #FWHM assuming a gaussian core                             [deg]
-ELONGATION               #A_IMAGE/B_IMAGE                                          
-ELLIPTICITY              #1 - B_IMAGE/A_IMAGE                                      
+ELONGATION               #A_IMAGE/B_IMAGE
+ELLIPTICITY              #1 - B_IMAGE/A_IMAGE
 
 VIGNET(51,51)            #Pixel data around detection                               [count]
 
-#VECTOR_ASSOC             #ASSOCiated parameter vector                              
-#NUMBER_ASSOC             #Number of ASSOCiated IDs                                 
+#VECTOR_ASSOC             #ASSOCiated parameter vector
+#NUMBER_ASSOC             #Number of ASSOCiated IDs
 
 #SPREAD_MODEL
 #SPREADERR_MODEL

@@ -505,20 +505,29 @@ class SExtractorCaller():
         formats = ['E', 'E', 'E']
         for idx, key in enumerate(['X_IMAGE','MAGERR_AUTO', 'MAG_AUTO']):
             array = np.array(data[key], dtype=data[key].dtype)
-            #import pdb
-            #pdb.set_trace()
-            #array = np.array(data[key], dtype='float64')
             print(key, data[key].dtype, formats[idx], array[:5])
             cols.append(fits.Column(name=key, array=array, format=formats[idx]))
-        array = np.arange(len(data['X_IMAGE']), dtype='float64')
-        cols.append(fits.Column(name='NUMBER', array=array, format='E'))
+        #key = 'NUMBER'
+        #form = 'I'
+        #array = data[key]
+        #cols.append(fits.Column(name=key, array=array, format=form))
         hdu_data = fits.BinTableHDU.from_columns(fits.ColDefs(cols))
+        ##hdu_data.header = fits.Header()
+        #hdu_data.header = fits.PrimaryHDU().header
+        #hdu_data.header.append(("TFIELDS",  len(cols), "number of table fields"))
+        #del hdu_data.header['NAXIS']
+        #hdu_data.header.append(("NAXIS", 1, "number of array dimensions"))
+        #hdu_data.header.append(("NAXIS1", 535680, "length of dimension 1"), end=True)                          
+        ##hdu_data.header.append(("NAXIS2", 1, "length of dimension 2"))
 
         hdu_out_primary = fits.PrimaryHDU()
         hdu_out_list = fits.HDUList([hdu_out_primary, hdu_out_ldac, hdu_data])
+        print(hdu_out_list[2].header)
+        hdu_out_list.verify(option="warn")
+        print('verified')
 
         # Write FITS file
-        hdu_out_list.writeto(self.path_output_file)
+        hdu_out_list.writeto(self.path_output_file, output_verify='warn')
 
 
 def convert_hdu_to_ldac(hdu):

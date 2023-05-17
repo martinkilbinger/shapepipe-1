@@ -758,7 +758,7 @@ class FITSCatalogue(BaseCatalogue):
                         names = data.dtype.names
                         it = names
                     else:
-                        raise ValueError('Column names not provided')
+                        raise ValueError('Names not provided')
                 else:
                     it = range(len(names))
                 self._save_to_fits(
@@ -772,7 +772,7 @@ class FITSCatalogue(BaseCatalogue):
 
             elif type(data) is list:
                 if names is None:
-                    raise ValueError('Column names not provided')
+                    raise ValueError('Names not provided')
                 it = range(len(names))
                 data = np.asarray(data)
                 self._save_to_fits(
@@ -786,7 +786,7 @@ class FITSCatalogue(BaseCatalogue):
 
             elif type(data) is Table:
                 if names is None:
-                    raise ValueError('Column names not provided')
+                    raise ValueError('Names not provided')
                 it = names
                 self._save_to_fits(
                     data,

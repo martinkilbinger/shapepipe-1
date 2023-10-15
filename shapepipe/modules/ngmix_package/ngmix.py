@@ -1020,8 +1020,6 @@ def do_ngmix_metacal(
 
         res[key] = tres
 
-    # result dictionary, keyed by the types in metacal_pars above
-    metacal_res = res
 
     metacal_res.update(psf_res_gT)
     metacal_res['moments_fail'] = fail_get_guess

@@ -635,7 +635,7 @@ def prepare_ngmix_weights(gal,weight,flag):
 
 def prepare_galaxy_data(gal,weight,flag,psf,wcs):
     """single galaxy and epoch to be passed to ngmix
-    TO DO: deal with gal_guess_tmp, pixel scale
+    TO DO: pixel scale
     Parameters
     ----------
     gal : numpy.ndarray
@@ -652,8 +652,6 @@ def prepare_galaxy_data(gal,weight,flag,psf,wcs):
     -------
     ngmix.observation.Observation
         observation to fit using ngmix
-    float  
-        sum of pixels on weight map
 
     """
     # prepare psf
@@ -671,7 +669,6 @@ def prepare_galaxy_data(gal,weight,flag,psf,wcs):
         weight,
         flag
     )
-    wsum = np.sum(weight_map)
  
     # Recenter jacobian if necessary
     gal_jacob = ngmix.Jacobian(
@@ -688,34 +685,49 @@ def prepare_galaxy_data(gal,weight,flag,psf,wcs):
         noise=noise_img
     )
  
-    return gal_obs, wsum
+    return gal_obs
 
-def parse_ngmix_results(resdict,obsdict):
-    """ averages results over multiple epochs
+def average_multiepoch_psf(obsdict):
+    """ averages psf information over multiple epochs
     
     Parameters
     ----------
-    res : dict
-        dictionary of metacal fitting results
+    obsdict : dict
+        dictionary of metacal observations after fit
 
   dict_keys(['noshear', '1p', '1m', '2p', '2m'])
 
   dict_keys(['model', 'flags', 'nfev', 'ier', 'errmsg', 'pars', 'pars_err', 'pars_cov0', 'pars_cov', 'lnprob', 's2n_numer', 's2n_denom', 'npix', 'chi2per', 'dof', 's2n_w', 's2n', 'g', 'g_cov', 'g_err', 'T', 'T_err', 'flux', 'flux_err'])
-    we also want psf information
     Returns
     -------
     dict
-        Dictionary containing the results of NGMIX metacal
+        Average psf size, shape over n_epochs
 
     """
+    # create dictionary
+    names = ['T_psf', 'T_psf_err', 'g_psf', 'g_psf_err']
+    psf_dict = {k: for k in names}
     # include relevant psf quantities- check how they are presented for multi-epoch observations
-    T_psf=obsdict['noshear'].psf.meta['result']['T']
-    T_psf_err=obsdict['noshear'].psf.meta['result']['g_err']
-    g_psf=obsdict['noshear'].psf.meta['result']['g']
+    wsum = 0
+    gpsf_sum = 0
+    Tpsf_sum = 0
+    for n_e in np.arange(nepoch):
+        T_psf=obsdict['noshear'][n_e].psf.meta['result']['T']
+        T_psf_err=obsdict['noshear'][n_e].psf.meta['result']['g_err']
+        g_psf=obsdict['noshear'][n_e].psf.meta['result']['g']
+        ne_wsum = obsdict['noshear'][0].weight.sum()
 
-    # result dictionary, keyed by the types in metacal_pars above
-    metacal_res = resdict
-    return metacal_res      
+        # we probably want to handle cases when there is no psf
+        # how are we dealing with the error, what is npsf
+        wsum += ne_wsum
+        gpsf_sum += g_psf * ne_wsum
+        Tpsf_sum += T_psf * ne_wsum
+        #npsf += 1
+
+    psf_dict['g_psf'] = gpsf_sum / wsum
+    psf_dict['T_psf'] = Tpsf_sum / wsum    
+
+    return psf_dict      
 
 def do_ngmix_metacal(
     gals,
@@ -768,8 +780,6 @@ def do_ngmix_metacal(
 
     # Construct observation objects to pass to ngmix 
     gal_obs_list = ObsList()
-    # initialize galaxy weight counter
-    wsum = 0
 
     # create list of ngmix observations for each galaxy
     for n_e in range(n_epoch):
@@ -780,7 +790,6 @@ def do_ngmix_metacal(
             psfs[n_e],
             jacob_list[n_e]
         )
-        wsum += wtmp
         gal_obs_list.append(gal_obs)
    
     # keep track of weights, in case galaxy has zero weight- we may scrap this depending on how ngmix returns Tpsf
@@ -836,5 +845,5 @@ def do_ngmix_metacal(
     # this is the actual fit
     resdict, obsdict = boot.go(gal_obs_list)
     # compile results to include psf information
-    metacal_res = parse_ngmix_results(resdict,obsdict)
-    return metacal_res
+    psf_res = average_multiepoch_psf(obsdict)
+    return resdict, psf_res

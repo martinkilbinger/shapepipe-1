@@ -62,6 +62,7 @@ class Ngmix(object):
         pixel_scale,
         f_wcs_path,
         w_log,
+        rng,
         id_obj_min=-1,
         id_obj_max=-1
     ):
@@ -91,10 +92,9 @@ class Ngmix(object):
 
         self._w_log = w_log
 
-        # Initiatlise random generator (this should be less stupid)
+        # Initiatlise random generator
         seed = int(''.join(re.findall(r'\d+', self._file_number_string)))
-        np.random.seed(seed)
-        rng = np.random.RandomState(932)
+        self._rng = np.random.RandomState(seed)
         self._w_log.info(f'Random generator initialisation seed = {seed}')
 
     @classmethod
@@ -150,7 +150,12 @@ class Ngmix(object):
         # 2-d Gaussian prior on the object center
         # centered with respect to jacobian center
         # Units same as jacobian, probably arcsec
-        cen_prior = ngmix.priors.CenPrior(cen1=0.0, cen2=0.0, sigma1=self._pixel_scale, sigma2=self._pixel_scale, rng=rng)
+        cen_prior = ngmix.priors.CenPrior(
+            cen1=0.0, 
+            cen2=0.0, 
+            sigma1=self.scale, 
+            sigma2=self.scale, 
+            rng=rng)
         
         # Prior on ellipticity. Details do not matter, as long
         # as it regularizes the fit. From Bernstein & Armstrong 2014
@@ -372,7 +377,7 @@ class Ngmix(object):
         flag_vign_cat = SqliteDict(self._flag_vignet_path)
 
         final_res = []
-        prior = self.get_prior()
+        prior = self.get_prior(self._rng, self._pixel_scale)
 
         count = 0
         id_first = -1
@@ -466,15 +471,15 @@ class Ngmix(object):
             if len(gal_vign) == 0:
                 continue
             try:
-                res = do_ngmix_metacal(
+                res, psf_res = do_ngmix_metacal(
                     gal_vign,
                     psf_vign,
-                    sigma_psf,
                     weight_vign,
                     flag_vign,
                     jacob_list,
                     prior,
-                    self._pixel_scale
+                    self._pixel_scale,
+                    self._rng
                 )
 
             except Exception as ee:
@@ -537,7 +542,7 @@ def get_jacob(wcs, ra, dec):
 
 def get_noise(gal, weight, guess, pixel_scale, thresh=1.2):
     """Get Noise.
-
+    TO DO: modify guess, pixel scale
     Compute the sigma of the noise from an object postage stamp.
     Use a guess on the object size, ellipticity and flux to create a window
     function.
@@ -585,6 +590,7 @@ def get_noise(gal, weight, guess, pixel_scale, thresh=1.2):
 def prepare_ngmix_weights(gal,weight,flag):
     """bookkeeping for ngmix weights. runs on a single galaxy and epoch
         pixel scale and galaxy guess
+        TO DO: decide if we want galaxy guess stuff
 
     Parameters
     ----------
@@ -706,7 +712,7 @@ def average_multiepoch_psf(obsdict):
     """
     # create dictionary
     names = ['T_psf', 'T_psf_err', 'g_psf', 'g_psf_err']
-    psf_dict = {k: for k in names}
+    psf_dict = {k: [] for k in names}
     # include relevant psf quantities- check how they are presented for multi-epoch observations
     wsum = 0
     gpsf_sum = 0
@@ -723,6 +729,8 @@ def average_multiepoch_psf(obsdict):
         gpsf_sum += g_psf * ne_wsum
         Tpsf_sum += T_psf * ne_wsum
         #npsf += 1
+    if wsum == 0:
+        raise ZeroDivisionError('Sum of weights = 0, division by zero')
 
     psf_dict['g_psf'] = gpsf_sum / wsum
     psf_dict['T_psf'] = Tpsf_sum / wsum    
@@ -778,7 +786,7 @@ def do_ngmix_metacal(
     psf_model = 'gauss'
     gal_model = 'gauss'
 
-    # Construct observation objects to pass to ngmix 
+    # Construct multi-epoch observation object to pass to ngmix 
     gal_obs_list = ObsList()
 
     # create list of ngmix observations for each galaxy
@@ -792,10 +800,6 @@ def do_ngmix_metacal(
         )
         gal_obs_list.append(gal_obs)
    
-    # keep track of weights, in case galaxy has zero weight- we may scrap this depending on how ngmix returns Tpsf
-    if wsum == 0:
-        raise ZeroDivisionError('Sum of weights = 0, division by zero')
-
     #  decide on fitting options
     fitter = ngmix.fitting.Fitter(model=gal_model, prior=prior)
     # make parameter guesses based on a psf flux and a rough T

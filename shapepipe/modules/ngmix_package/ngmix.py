@@ -17,7 +17,8 @@ from sqlitedict import SqliteDict
 
 from shapepipe.pipeline import file_io
 
-class Tile_cat(object):
+# I still don't know how to handle this
+class Tile_cat():
  """Tile_cat.
 
     catalog measured on a tile
@@ -35,9 +36,9 @@ class Tile_cat(object):
         
         # sextractor detection catalog for the tile
         self.tile_vignet
-        dtype = [('obj_id','i8'),('ra',''),('dec',''),('flux','')]
-        self.tile_data = np.recarray(())
-       
+        dtype = [('obj_id','i4'),('ra','>f8'),('dec','>f8'),('flux','>f4'),('VIGNET', '>f4', (51, 51))]
+        #self.tile_data = np.recarray(())
+    
     @classmethod
     def get_data(self, cat_path):
         tile_cat = file_io.FITSCatalogue(
@@ -52,9 +53,13 @@ class Tile_cat(object):
         self.ra = np.copy(tile_cat.get_data()['XWIN_WORLD'])
         self.dec = np.copy(tile_cat.get_data()['YWIN_WORLD'])
         self.flux = np.copy(tile_cat.get_data()['FLUX_AUTO'])
+        self.size = np.copy(tile_cat.get_data()['FWHM_WORLD'])
+        self.e = np.copy(tile_cat.get_data()['ELLIPTICITY'])
+        self.theta = np.copy(tile_cat.get_data()['THETA_WIN_WORLD'])
+
         tile_cat.close()
 
-class Postage_stamp(object):
+class Postage_stamp():
     """Galaxy Postage Stamp.
 
     Class to hold catalog of postage stamps for a single galaxy
@@ -81,7 +86,7 @@ class Postage_stamp(object):
         self.bkg_sub = bkg_sub
         self.megacam_flip = megacam_flip
 
-class Vignet(object):
+class Vignet():
     """Vignet.
 
     Class to hold catalog of postage stamps
@@ -650,6 +655,7 @@ def rescale_epoch_fluxes(gal,weight,header):
     weight : numpy.ndarray
         weight image
     header : 
+        image header
         
     Returns
     -------
@@ -742,7 +748,7 @@ def get_noise(gal, weight, guess, pixel_scale, thresh=1.2):
 
     return sig_noise
 
-def prepare_ngmix_weights(gal,weight,flag):
+def prepare_ngmix_weights(gal,weight,flag,tile_cat):
     """bookkeeping for ngmix weights. runs on a single galaxy and epoch
         pixel scale and galaxy guess
         TO DO: decide if we want galaxy guess stuff
@@ -783,11 +789,13 @@ def prepare_ngmix_weights(gal,weight,flag):
 
     noise_img = np.random.randn(*gal.shape) * sig_noise
     noise_img_gal = np.random.randn(*gal.shape) * sig_noise
-
+    
+    # fill in galaxy image masked regions with noise
     gal_masked = np.copy(gal)
     if (len(np.where(weight_map == 0)[0]) != 0):
         gal_masked[weight_map == 0] = noise_img_gal[weight_map == 0]
 
+    # convert weight map to variance map
     weight_map *= 1 / sig_noise ** 2
     
     return gal_masked, weight_map, noise_img
@@ -847,8 +855,6 @@ def make_ngmix_observation(gal,weight,flag,psf,wcs):
  
     return gal_obs
 
-def weighted_average(data):
-
 def average_multiepoch_psf(obsdict,nepoch):
     """ averages psf information over multiple epochs
     we may need to do this for original psf as well
@@ -886,7 +892,7 @@ def average_multiepoch_psf(obsdict,nepoch):
         g_psf_err_sum += g_psf_err * ne_wsum
         T_psf_sum += T_psf * ne_wsum
         T_psf_err_sum += T_psf_err * ne_wsum
-        #npsf += 1
+
     if wsum == 0:
         raise ZeroDivisionError('Sum of weights = 0, division by zero')
 
@@ -961,7 +967,7 @@ def do_ngmix_metacal(
 
     # psf fitting a gaussian
     psf_fitter  = ngmix.fitting.Fitter(model=psf_model, prior=prior)
-    # TO DO! update flux to sextractor flux                               
+    # TO DO! what do we do about size?                              
     psf_guesser = ngmix.guessers.TFluxGuesser(
         rng=rng,
         T=0.25,
@@ -1001,3 +1007,33 @@ def do_ngmix_metacal(
     # compile results to include psf information
     psf_res = average_multiepoch_psf(obsdict)
     return resdict, psf_res
+
+# Define the SExtractor parameters for a galaxy
+def sextractor_e1e2(e,theta):
+    """sextractor_e1e2
+
+    computes ellipticity from sextrator quantities
+    Parameters
+    ----------
+    stamp : Postage_stamp
+        List of the galaxy vignets.  List indices run over epochs
+    prior : ngmix.priors
+        Priors for the fitting parameters
+    flux_guess : np.ndarray
+        guess for flux
+    pixel_scale : float
+        pixel scale in arcsec
+    rng : numpy.random.RandomState
+        Random state for guesses and priors    
+
+    Returns
+    -------
+    np.ndarray
+        ellipticity
+
+    """
+    # Convert the position angle from degrees to radians
+    phi = np.radians(theta) - np.pi/2
+    # Calculate the ellipticity vector
+    e_vec = e * np.array([np.cos(2*phi), np.sin(2*phi)])
+    return e_vec

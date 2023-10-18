@@ -238,8 +238,8 @@ def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.
     gal_hlr = 0.5
     dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
 
-    #obj0 = galsim.Exponential(
-    obj0 = galsim.Gaussian(
+    #obj0 = galsim.Gaussian(
+    obj0 = galsim.Exponential(
         half_light_radius=gal_hlr,
         flux=flux,
     ).shear(

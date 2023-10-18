@@ -13,6 +13,7 @@ import numpy as np
 from astropy.io import fits
 from modopt.math.stats import sigma_mad
 from ngmix.observation import Observation, ObsList
+from ngmix.jacobian import Jacobian
 from sqlitedict import SqliteDict
 
 from shapepipe.pipeline import file_io
@@ -500,7 +501,7 @@ class Ngmix(object):
             if len(stamp.gals) == 0:
                 continue
             try:
-                res, psf_res = do_ngmix_metacal(
+                res, obsdict, psf_res = do_ngmix_metacal(
                     stamp,
                     prior,
                     tile_cat.flux[i_tile],
@@ -593,17 +594,17 @@ def prepare_postage_stamps(vignet, tile_cat, backgroud_subtract=True):
             gal_vign_sub_bkg,
             weight_vign,
             header
-            )
+        )
 
         # gather postage stamps in all of the epochs
-        stamp.gal_vign_list.append(gal_vign_scaled)
-        stamp.psf_vign_list.append(
+        stamp.gals.append(gal_vign_scaled)
+        stamp.psfs.append(
             vignet.psf_vign_cat[str(obj_id)][expccd_name]['VIGNET']
         )
 
-        stamp.weight_vign_list.append(weight_vign_scaled)
-        stamp.flag_vign_list.append(flag_vign)
-        stamp.jacob_list.append(jacob)
+        stamp.weights.append(weight_vign_scaled)
+        stamp.flags.append(flag_vign)
+        stamp.jacobs.append(jacob)
                 
     return stamp
 
@@ -681,6 +682,15 @@ def get_jacob(wcs, ra, dec):
     galsim_jacob = g_wcs.jacobian(world_pos=world_pos)
 
     return galsim_jacob
+
+    #jaobian = Jacobian(
+        #wcs=wcs,
+        #x=ra * galsim.angle.degrees,
+        #y=dec * galsim.angle.degrees
+    #)
+    #print("MKDEBUG ngmix jacobian")
+    #return jacobian
+
 
 
 def get_noise(gal, weight, guess, pixel_scale, thresh=1.2):
@@ -771,12 +781,14 @@ def prepare_ngmix_weights(gal,weight,flag):
 
     noise_img = np.random.randn(*gal.shape) * sig_noise
     noise_img_gal = np.random.randn(*gal.shape) * sig_noise
+    # MKDEBUG why two noise images?
 
     gal_masked = np.copy(gal)
     if (len(np.where(weight_map == 0)[0]) != 0):
         gal_masked[weight_map == 0] = noise_img_gal[weight_map == 0]
 
-    weight_map *= 1 / sig_noise ** 2
+    #weight_map *= 1 / sig_noise ** 2
+    print("MKDEBUG omitting 1/sig_noise^2")
     
     return gal_masked, weight_map, noise_img
 
@@ -834,7 +846,7 @@ def prepare_galaxy_data(gal,weight,flag,psf,wcs):
  
     return gal_obs
 
-def average_multiepoch_psf(obsdict,nepoch):
+def average_multiepoch_psf(obsdict, nepoch):
     """ averages psf information over multiple epochs
     we may need to do this for original psf as well
     Parameters
@@ -881,6 +893,7 @@ def average_multiepoch_psf(obsdict,nepoch):
     psf_dict['T_psf_err'] = T_psf_err_sum / wsum    
 
     return psf_dict      
+
 
 def do_ngmix_metacal(
     stamp,
@@ -963,26 +976,19 @@ def do_ngmix_metacal(
         fitter=fitter, guesser=guesser,
         ntry=5,
     )
-    # metacal specific parameters
-    metacal_pars = {
-        'types': ['noshear', '1p', '1m', '2p', '2m'],
-        'step': 0.01,
-        'psf': 'fitgauss',
-        'fixnoise': True,
-        'use_noise_image': True
-    }
 
     # this "bootstrapper" runs the metacal image shearing as well as both psf
     # and object measurements
+    print("MKDEBUG Call sp ngmix MetacalBootstrapper")
     boot = ngmix.metacal.MetacalBootstrapper(
-        metacal_pars,
         runner=runner, 
         psf_runner=psf_runner,
+        rng=rng,
         ignore_failed_psf=True,
-        rng=rng
     )
     # this is the actual fit
     resdict, obsdict = boot.go(gal_obs_list)
     # compile results to include psf information
-    psf_res = average_multiepoch_psf(obsdict)
-    return resdict, psf_res
+    psf_res = average_multiepoch_psf(obsdict, n_epoch)
+
+    return resdict, obsdict, psf_res

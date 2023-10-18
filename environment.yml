@@ -30,4 +30,5 @@ dependencies:
     - termcolor==1.1.0
     - tqdm==4.63.0
     - treecorr==4.2.6
+    - git+https://github.com/esheldon/ngmix
     - git+https://github.com/tobias-liaudat/Stile@v0.1

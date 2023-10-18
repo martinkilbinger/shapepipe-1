@@ -13,7 +13,6 @@ import numpy as np
 from astropy.io import fits
 from modopt.math.stats import sigma_mad
 from ngmix.observation import Observation, ObsList
-from ngmix.jacobian import Jacobian
 from sqlitedict import SqliteDict
 
 from shapepipe.pipeline import file_io
@@ -683,15 +682,6 @@ def get_jacob(wcs, ra, dec):
 
     return galsim_jacob
 
-    #jaobian = Jacobian(
-        #wcs=wcs,
-        #x=ra * galsim.angle.degrees,
-        #y=dec * galsim.angle.degrees
-    #)
-    #print("MKDEBUG ngmix jacobian")
-    #return jacobian
-
-
 
 def get_noise(gal, weight, guess, pixel_scale, thresh=1.2):
     """Get Noise.
@@ -787,8 +777,7 @@ def prepare_ngmix_weights(gal,weight,flag):
     if (len(np.where(weight_map == 0)[0]) != 0):
         gal_masked[weight_map == 0] = noise_img_gal[weight_map == 0]
 
-    #weight_map *= 1 / sig_noise ** 2
-    print("MKDEBUG omitting 1/sig_noise^2")
+    weight_map *= 1 / sig_noise ** 2
     
     return gal_masked, weight_map, noise_img
 
@@ -979,7 +968,6 @@ def do_ngmix_metacal(
 
     # this "bootstrapper" runs the metacal image shearing as well as both psf
     # and object measurements
-    print("MKDEBUG Call sp ngmix MetacalBootstrapper")
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner, 
         psf_runner=psf_runner,

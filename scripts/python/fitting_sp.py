@@ -61,11 +61,20 @@ def main():
     prior = get_prior(rng=rng, scale=obs.jacobian.scale)
 
     # Call ShapePipe ngmix function 
-    #for iepoch in range(nepoch):
-        #noise = sigma_mad(stamp.gals[iepoch])
-        #noise = args.noise)
-        #stamp.weights[iepoch] *= args.noise ** 2
+    print('MKDEBUG 1 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+    for iepoch in range(nepoch):
+        noise = sigma_mad(stamp.gals[iepoch])
+        #noise = args.noise
+        stamp.weights[iepoch] *= noise ** 2
+    print('MKDEBUG 2 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+    print("Calling sp ngmix MetacalBootstrapper")
     res, obsdict, psf_res = do_ngmix_metacal(stamp, prior, flux, rng)
+    print('MKDEBUG 3 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+    for iepoch in range(nepoch):
+        noise = sigma_mad(stamp.gals[iepoch])
+        #noise = args.noise
+        stamp.weights[iepoch] /= noise ** 2
+    print('MKDEBUG 4 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
     print_results(res, obsdict, obj_pars)
 
     # Local ngmix runner
@@ -104,7 +113,7 @@ def main():
     )
 
     # this bootstraps the process, first fitting psfs then the object
-    print("MKDEBUG Call fitting MetacalBootstrapper")                          
+    print("Calling fitting_sp MetacalBootstrapper")                          
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner,
         psf_runner=psf_runner,

@@ -17,7 +17,8 @@ from sqlitedict import SqliteDict
 
 from shapepipe.pipeline import file_io
 
-class Tile_cat(object):
+# I still don't know how to handle this
+class Tile_cat():
  """Tile_cat.
 
     catalog measured on a tile
@@ -27,32 +28,48 @@ class Tile_cat(object):
     cat_path
 
     """
- def __init__(self, cat_path):
+    def __init__(
+        self, 
+        cat_path
+    ):
         self.cat_path = cat_path
-      # sextractor detection catalog for the tile
+        
+        # sextractor detection catalog for the tile
+        self.tile_vignet
+        dtype = [('obj_id','i4'),('ra','>f8'),('dec','>f8'),('flux','>f4'),('VIGNET', '>f4', (51, 51))]
+        #self.tile_data = np.recarray(())
+    
+    @classmethod
+    def get_data(self, cat_path):
         tile_cat = file_io.FITSCatalogue(
-            self.cat_path,
+            cat_path,
             SEx_catalogue=True,
         )
         tile_cat.open()
         # I would like to make this into an object cat
-        self.obj_id = np.copy(tile_cat.get_data()['NUMBER'])
         self.vign = np.copy(tile_cat.get_data()['VIGNET'])
+
+        self.obj_id = np.copy(tile_cat.get_data()['NUMBER'])
         self.ra = np.copy(tile_cat.get_data()['XWIN_WORLD'])
         self.dec = np.copy(tile_cat.get_data()['YWIN_WORLD'])
         self.flux = np.copy(tile_cat.get_data()['FLUX_AUTO'])
+        self.size = np.copy(tile_cat.get_data()['FWHM_WORLD'])
+        self.e = np.copy(tile_cat.get_data()['ELLIPTICITY'])
+        self.theta = np.copy(tile_cat.get_data()['THETA_WIN_WORLD'])
+
         tile_cat.close()
 
-class Postage_stamp(object):
+class Postage_stamp():
     """Galaxy Postage Stamp.
 
     Class to hold catalog of postage stamps for a single galaxy
 
     Parameters
     ----------
-    bkg_subtraction: bool
+    bkg_sub: bool
 
     megacam_flip: bool
+    We probably want to put weight and flag options here too
 
     """
     def __init__(
@@ -69,7 +86,7 @@ class Postage_stamp(object):
         self.bkg_sub = bkg_sub
         self.megacam_flip = megacam_flip
 
-class Vignet(object):
+class Vignet():
     """Vignet.
 
     Class to hold catalog of postage stamps
@@ -164,12 +181,21 @@ class Ngmix(object):
             )
 
         self._tile_cat_path = input_file_list[0]
+        self._vignet_cat = Vignet(
+            input_file_list[1],
+            input_file_list[2],
+            input_file_list[3],
+            input_file_list[4],
+            input_file_list[5],
+            f_wcs_path
+        )
+        #self._gal_vignet_path = input_file_list[1]
+        #self._bkg_vignet_path = input_file_list[2]
+        #self._psf_vignet_path = input_file_list[3]
+        #self._weight_vignet_path = input_file_list[4]
+        #self._flag_vignet_path = input_file_list[5]
 
-        self._gal_vignet_path = input_file_list[1]
-        self._bkg_vignet_path = input_file_list[2]
-        self._psf_vignet_path = input_file_list[3]
-        self._weight_vignet_path = input_file_list[4]
-        self._flag_vignet_path = input_file_list[5]
+      
 
         self._output_dir = output_dir
         self._file_number_string = file_number_string
@@ -177,7 +203,7 @@ class Ngmix(object):
         self._zero_point = zero_point
         self._pixel_scale = pixel_scale
 
-        self._f_wcs_path = f_wcs_path
+        #self._f_wcs_path = f_wcs_path
         self._id_obj_min = id_obj_min
         self._id_obj_max = id_obj_max
 
@@ -455,15 +481,8 @@ class Ngmix(object):
       
         tile_cat = Tile_cat('')
         # i would like to make this into an object vignet
-        vignet_cat = Vignet(
-            self._gal_vignet_path,
-            self._bkg_vignet_path,
-            self._psf_vignet_path,
-            self._weight_vignet_path,
-            self._flag_vignet_path,
-            self._f_wcs_path
-        )
-  
+        vignet_cat = self._vignet_cat  
+
         final_res = []
         prior = self.get_prior()
 
@@ -482,17 +501,11 @@ class Ngmix(object):
             id_last = obj_id
 
             count = count + 1
-
+            
+            # make postage stamp, skip if not observed
             try:
-
                 stamp = prepare_postage_stamps(vignet_cat)
-
-            except Exception as ee:
-                #make an explicit exception here
-            #if (
-            #    (psf_vign_cat[str(obj_id)] == 'empty')
-            #    or (gal_vign_cat[str(obj_id)] == 'empty')
-            #):
+            except AttributeError:
                 continue
             
             #if object is observed, carry out metacal operations and run ngmix
@@ -513,7 +526,7 @@ class Ngmix(object):
                     f'ngmix failed for object ID={obj_id}.\nMessage: {ee}'
                 )
                 continue
-
+            # these things need to be considered
             res['obj_id'] = obj_id
             res['n_epoch_model'] = len(stamp.gal_vign_list)
             final_res.append(res)
@@ -531,12 +544,16 @@ class Ngmix(object):
         # Save results
         self.save_results(res_dict)
 
-def prepare_postage_stamps(vignet, tile_cat, backgroud_subtract=True):
+def prepare_postage_stamps(vignet, tile_cat):
     i_tile = tile_cat.obj_id - 1
     obj_id = tile_cat.obj_id
     # define per-object lists of individual exposures to go into ngmix
     stamp = Postage_stamp()
-   
+    if (
+        (vignet.psf_vign_cat[str(obj_id)] == 'empty')
+        or (vignet.gal_vign_cat[str(obj_id)] == 'empty')
+    ):
+        raise AttributeError
     #identify exposure and ccd number from psf catalog
     psf_expccd_names = list(vignet.psf_vign_cat[str(obj_id)].keys())
     for expccd_name in psf_expccd_names:
@@ -578,7 +595,7 @@ def prepare_postage_stamps(vignet, tile_cat, backgroud_subtract=True):
             vignet.weight_vign_cat[str(obj_id)][expccd_name]['VIGNET']
         )
 
-        jacob = get_jacob(
+        jacob = get_galsim_jacobian(
             vignet.f_wcs_file[exp_name][int(ccd_n)]['WCS'],
             tile_cat.ra[i_tile],
             tile_cat.dec[i_tile]
@@ -638,6 +655,7 @@ def rescale_epoch_fluxes(gal,weight,header):
     weight : numpy.ndarray
         weight image
     header : 
+        image header
         
     Returns
     -------
@@ -653,9 +671,9 @@ def rescale_epoch_fluxes(gal,weight,header):
 
     return gal_scaled, weight_scaled
 
-def get_jacob(wcs, ra, dec):
-    """Get Jacobian.
-    Return the Jacobian of the WCS at the required position.
+def get_galsim_jacobian(wcs, ra, dec):
+    """Get local wcs.
+    This produces a galsim jacobian at a point.  We call it local_wcs because we convert to a ngmix object to create the jacobian later.
     TO DO: can we do this within ngmix?
 
     Parameters
@@ -730,7 +748,7 @@ def get_noise(gal, weight, guess, pixel_scale, thresh=1.2):
 
     return sig_noise
 
-def prepare_ngmix_weights(gal,weight,flag):
+def prepare_ngmix_weights(gal,weight,flag,tile_cat):
     """bookkeeping for ngmix weights. runs on a single galaxy and epoch
         pixel scale and galaxy guess
         TO DO: decide if we want galaxy guess stuff
@@ -773,15 +791,17 @@ def prepare_ngmix_weights(gal,weight,flag):
     noise_img_gal = np.random.randn(*gal.shape) * sig_noise
     # MKDEBUG why two noise images?
 
+    # fill in galaxy image masked regions with noise
     gal_masked = np.copy(gal)
     if (len(np.where(weight_map == 0)[0]) != 0):
         gal_masked[weight_map == 0] = noise_img_gal[weight_map == 0]
 
+    # convert weight map to variance map
     weight_map *= 1 / sig_noise ** 2
     
     return gal_masked, weight_map, noise_img
 
-def prepare_galaxy_data(gal,weight,flag,psf,wcs):
+def make_ngmix_observation(gal,weight,flag,psf,wcs):
     """single galaxy and epoch to be passed to ngmix
     TO DO: pixel scale
     Parameters
@@ -803,6 +823,7 @@ def prepare_galaxy_data(gal,weight,flag,psf,wcs):
 
     """
     # prepare psf
+    # WHY RECENTER
     psf_jacob = ngmix.Jacobian(
         row=(psf.shape[0] - 1) / 2,
         col=(psf.shape[1] - 1) / 2,
@@ -817,7 +838,7 @@ def prepare_galaxy_data(gal,weight,flag,psf,wcs):
         weight,
         flag
     )
- 
+    # WHY RECENTER???
     # Recenter jacobian if necessary
     gal_jacob = ngmix.Jacobian(
         row=(gal.shape[0] - 1) / 2,
@@ -872,7 +893,7 @@ def average_multiepoch_psf(obsdict, nepoch):
         g_psf_err_sum += g_psf_err * ne_wsum
         T_psf_sum += T_psf * ne_wsum
         T_psf_err_sum += T_psf_err * ne_wsum
-        #npsf += 1
+
     if wsum == 0:
         raise ZeroDivisionError('Sum of weights = 0, division by zero')
 
@@ -928,7 +949,7 @@ def do_ngmix_metacal(
 
     # create list of ngmix observations for each galaxy
     for n_e in range(n_epoch):
-        gal_obs = prepare_galaxy_data(
+        gal_obs = make_ngmix_observation(
             stamp.gals[n_e],
             stamp.weights[n_e],
             stamp.flags[n_e],
@@ -948,7 +969,7 @@ def do_ngmix_metacal(
 
     # psf fitting a gaussian
     psf_fitter  = ngmix.fitting.Fitter(model=psf_model, prior=prior)
-    # TO DO! update flux to sextractor flux                               
+    # TO DO! what do we do about size?                              
     psf_guesser = ngmix.guessers.TFluxGuesser(
         rng=rng,
         T=0.25,
@@ -980,3 +1001,35 @@ def do_ngmix_metacal(
     psf_res = average_multiepoch_psf(obsdict, n_epoch)
 
     return resdict, obsdict, psf_res
+
+
+# Define the SExtractor parameters for a galaxy
+def sextractor_e1e2(e,theta):
+    """sextractor_e1e2
+
+    computes ellipticity from sextrator quantities
+    Parameters
+    ----------
+    stamp : Postage_stamp
+        List of the galaxy vignets.  List indices run over epochs
+    prior : ngmix.priors
+        Priors for the fitting parameters
+    flux_guess : np.ndarray
+        guess for flux
+    pixel_scale : float
+        pixel scale in arcsec
+    rng : numpy.random.RandomState
+        Random state for guesses and priors    
+
+    Returns
+    -------
+    np.ndarray
+        ellipticity
+
+    """
+    # Convert the position angle from degrees to radians
+    phi = np.radians(theta) - np.pi/2
+    # Calculate the ellipticity vector
+    e_vec = e * np.array([np.cos(2*phi), np.sin(2*phi)])
+    return e_vec
+>>>>>>> lucie/ngmix_update

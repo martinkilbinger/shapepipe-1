@@ -58,6 +58,9 @@ FWHM_IMAGE               #FWHM assuming a gaussian core                         
 FWHM_WORLD               #FWHM assuming a gaussian core                             [deg]
 ELONGATION               #A_IMAGE/B_IMAGE                                          
 ELLIPTICITY              #1 - B_IMAGE/A_IMAGE                                      
+AWIN_IMAGE               Windowed profile RMS along major axis                     [pixel]
+BWIN_IMAGE               Windowed profile RMS along minor axis                     [pixel]
+THETAWIN_IMAGE           Windowed position angle (CCW/x)                           [deg]
 
 VIGNET(51,51)            #Pixel data around detection                               [count]
 

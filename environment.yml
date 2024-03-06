@@ -17,6 +17,7 @@ dependencies:
   - ngmix==2.3.0
   - numba
   - numpy==1.22
+  - pandas==1.4.1
   - pip:
     - cs_util
     - mccd==1.2.3
@@ -31,4 +32,3 @@ dependencies:
     - termcolor
     - tqdm
     - treecorr
-    - git+https://github.com/tobias-liaudat/Stile@v0.1

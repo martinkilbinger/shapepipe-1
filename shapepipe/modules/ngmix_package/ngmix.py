@@ -19,7 +19,7 @@ from shapepipe.pipeline import file_io
 
 # I still don't know how to handle this
 class Tile_cat():
- """Tile_cat.
+    """Tile_cat.
 
     catalog measured on a tile
 
@@ -836,7 +836,8 @@ def make_ngmix_observation(gal,weight,flag,psf,wcs):
     gal_masked, weight_map, noise_img = prepare_ngmix_weights(
         gal,
         weight,
-        flag
+        flag,
+        None,
     )
     # WHY RECENTER???
     # Recenter jacobian if necessary
@@ -1032,4 +1033,3 @@ def sextractor_e1e2(e,theta):
     # Calculate the ellipticity vector
     e_vec = e * np.array([np.cos(2*phi), np.sin(2*phi)])
     return e_vec
->>>>>>> lucie/ngmix_update

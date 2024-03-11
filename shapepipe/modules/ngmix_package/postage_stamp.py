@@ -4,6 +4,7 @@ import numpy as np
 from astropy.io import fits
 from modopt.math.stats import sigma_mad
 from sqlitedict import SqliteDict
+from shapepipe.pipeline import file_io
 
 class Tile_cat():
  """Postage stamps.
@@ -25,13 +26,7 @@ class Tile_cat():
 
     """
  
-def __init__(
-        self, 
-        cat_path,
-        bkg_sub
-        megacam_flip
-        ):
-
+def __init__( self, cat_path, bkg_sub, megacam_flip ):
         self.cat_path = cat_path
         self.bkg_sub = bkg_sub
         self.megacam_flip = megacam_flip
@@ -41,27 +36,25 @@ def __init__(
         dtype = [('obj_id','i4'),('ra','>f8'),('dec','>f8'),('flux','>f4'),('VIGNET', '>f4', (51, 51))]
         #self.tile_data = np.recarray(())
     
-    @classmethod
-    def get_data(self, cat_path):
-        tile_cat = file_io.FITSCatalogue(
+@classmethod
+def get_data(self, cat_path):
+    tile_cat = file_io.FITSCatalogue(
             cat_path,
             SEx_catalogue=True,
         )
-        tile_cat.open()
+    tile_cat.open()
         # I would like to make this into an object cat
-        self.vign = np.copy(tile_cat.get_data()['VIGNET'])
+    self.vign = np.copy(tile_cat.get_data()['VIGNET'])
 
-        self.obj_id = np.copy(tile_cat.get_data()['NUMBER'])
-        self.ra = np.copy(tile_cat.get_data()['XWIN_WORLD'])
-        self.dec = np.copy(tile_cat.get_data()['YWIN_WORLD'])
-        self.flux = np.copy(tile_cat.get_data()['FLUX_AUTO'])
-        self.size = np.copy(tile_cat.get_data()['FWHM_WORLD'])
-        self.e = np.copy(tile_cat.get_data()['ELLIPTICITY'])
-        self.theta = np.copy(tile_cat.get_data()['THETA_WIN_WORLD'])
+    self.obj_id = np.copy(tile_cat.get_data()['NUMBER'])
+    self.ra = np.copy(tile_cat.get_data()['XWIN_WORLD'])
+    self.dec = np.copy(tile_cat.get_data()['YWIN_WORLD'])
+    self.flux = np.copy(tile_cat.get_data()['FLUX_AUTO'])
+    self.size = np.copy(tile_cat.get_data()['FWHM_WORLD'])
+    self.e = np.copy(tile_cat.get_data()['ELLIPTICITY'])
+    self.theta = np.copy(tile_cat.get_data()['THETA_WIN_WORLD'])
 
-        tile_cat.close()
-
-
+    tile_cat.close()
 
 # we want this to inherit properties of catalog
 class Postage_stamp():
@@ -193,7 +186,7 @@ def preprocess_postage_stamps(vignet, tile_cat):
 
         if stamp.megacam_flip:
             tile_vign = (
-                Ngmix.MegaCamFlip(np.copy(tile_vign[i_tile]), int(ccd_n))
+                MegaCamFlip(np.copy(tile_vign[i_tile]), int(ccd_n))
             )
 
         flag_vign = (
@@ -373,7 +366,7 @@ def prepare_ngmix_weights(gal,weight,flag,weight_type):
     weight_map = np.copy(weight)
     if symmetrize_mask:
         #### add ask symmetrization here
-    weight_map[np.where(flag != 0)] = 0.
+        weight_map[np.where(flag != 0)] = 0.
 
     #else:
     if weight_type == 'THELI':
@@ -405,7 +398,7 @@ def prepare_ngmix_weights(gal,weight,flag,weight_type):
     return gal_masked, weight_map, noise_img
 
 def sextractor_sky_background_dev(filename):
-
+    #gets backdev from sextractor catalog
     return backdev
 
 # Define the SExtractor parameters for a galaxy

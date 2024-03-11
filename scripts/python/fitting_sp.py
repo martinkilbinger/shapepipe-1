@@ -45,6 +45,14 @@ def main():
 
     scale = 0.263
     flux = 100
+    stamp_size=53
+
+    wcs = galsim.JacobianWCS(
+        -0.00105142719975775,
+        0.16467706437987895,
+        0.15681099855148395,
+        -0.0015749298342502371
+    )
 
     g1 = -0.02
     g2 = 0.05
@@ -155,7 +163,7 @@ def fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, wt, psf_im):
         prior=prior,
     )
 
-    # psf fitting with coelliptical gaussians
+    # psf fitting with coelliptical gaussians # we need to change the psf fitter to FitGauss
     psf_fitter  = fitter
     # special guesser for coelliptical gaussians
     psf_guesser = ngmix.guessers.TFluxGuesser(
@@ -181,6 +189,7 @@ def fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, wt, psf_im):
         psf_runner=psf_runner,
         rng=rng,
         ignore_failed_psf=True,
+        psf='gauss'
     )
         #psf='fitgauss',
 
@@ -243,7 +252,7 @@ def get_prior(*, rng, scale, T_range=None, F_range=None, nband=None):
     return prior
 
 
-def make_psf(rng, scale=1.0):
+def make_psf(rng, stamp_size, wcs):
     """Make PSF
 
     Simulate MoffatPSF.
@@ -258,16 +267,27 @@ def make_psf(rng, scale=1.0):
         g1=-0.01,
         g2=-0.01,
     )
-
-    psf_im = psf.drawImage(scale=scale).array
+    
+    #psf_im = psf.drawImage(scale=scale).array
+    psf_im = psf.drawImage(nx=stamp_size, ny=stamp_size, wcs=wcs).array
+    # add noise
     psf_im += rng.normal(scale=psf_noise, size=psf_im.shape)
 
     psf_wt = psf_im*0 + 1.0/psf_noise**2
 
     psf_cen = (np.array(psf_im.shape)-1.0)/2.0
-    psf_jacobian = ngmix.DiagonalJacobian(
-        row=psf_cen[0], col=psf_cen[1], scale=scale,
+
+    psf_jacobian = ngmix.Jacobian(
+        x=psf_cen[1], 
+        y=psf_cen[0], 
+        wcs=wcs.jacobian(
+            image_pos=galsim.PositionD(psf_cen[1], psf_cen[0])
+        ),
     )
+
+    #psf_jacobian = ngmix.DiagonalJacobian(
+    #    row=psf_cen[0], col=psf_cen[1], scale=scale,
+    #)
 
     psf_obs = ngmix.Observation(
         psf_im,
@@ -316,7 +336,8 @@ def make_data(rng, noise, psf, psf_obs, jacobian, dx, dy, g1, g2, scale=1.0, flu
 
     obj = galsim.Convolve(psf, obj0)
 
-    im = obj.drawImage(scale=scale).array
+    im = obj.drawImage(nx=stamp_size, ny=stamp_size, wcs=wcs).array
+    # add noise
     im += rng.normal(scale=noise, size=im.shape)
 
     cen = (np.array(im.shape)-1.0)/2.0

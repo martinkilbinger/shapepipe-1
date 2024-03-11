@@ -70,7 +70,7 @@ def main():
     jacobian = []
 
     for iepoch in range(nepoch):
-        this_psf, this_psf_obs, this_psf_im = make_psf(rng, scale=scale)
+        this_psf, this_psf_obs, this_psf_im = make_psf(rng, n_pix, wcs)
 
         dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
         this_jacobian = ngmix.DiagonalJacobian(
@@ -78,14 +78,15 @@ def main():
         )
 
         noise = args.noise
-        this_obs, this_wt, this_obs_im = make_data(rng, noise, this_psf, this_psf_obs, this_jacobian, dx, dy, g1, g2, scale=scale)
+        this_obs, this_wt, this_obs_im = make_data(rng, noise, this_psf, this_psf_obs, this_jacobian, wcs, dx, dy, g1, g2, stamp_size, scale=scale)
 
-        if any(this_obs_im.shape != n_stamp):
-            raise ValueError(f"gal image has wrong size: {this_obs_im.shape}")
+        #if any(this_obs_im.shape != n_stamp):
+            #raise ValueError(f"gal image has wrong size: {this_obs_im.shape}")
+        print(f"gal image has size {this_obs_im.shape}")
         #if any(this_psf_im.shape != n_stamp):
             #raise ValueError(f"psf image has wrong size: {this_psf_im.shape}")
         if iepoch == 0:
-            print(f"psf image : {this_psf_im.shape}")
+            print(f"psf image has size {this_psf_im.shape}")
 
         psf.append(this_psf)
         psf_obs.append(this_psf_obs)
@@ -298,7 +299,7 @@ def make_psf(rng, stamp_size, wcs):
     return psf, psf_obs, psf_im
 
 
-def make_data(rng, noise, psf, psf_obs, jacobian, dx, dy, g1, g2, scale=1.0, flux=100.0):
+def make_data(rng, noise, psf, psf_obs, jacobian, wcs, dx, dy, g1, g2, stamp_size, scale=1.0, flux=100.0):
     """
     simulate an exponential object convolved with the psf
 

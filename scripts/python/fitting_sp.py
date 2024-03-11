@@ -45,18 +45,28 @@ def main():
 
     scale = 0.263
     flux = 100
+    stamp_size=53
+
+    wcs = galsim.JacobianWCS(
+        -0.00105142719975775,
+        0.16467706437987895,
+        0.15681099855148395,
+        -0.0015749298342502371
+    )
 
     for iepoch in range(nepoch):
-        psf, psf_obs, psf_im = make_psf(rng=rng, scale=scale)
+        psf, psf_obs, psf_im = make_psf(rng=rng, stamp_size=stamp_size, wcs=wcs)
 
-        obs, obj_pars, wt, obs_im, jacobian = make_data(psf=psf, psf_obs=psf_obs, scale=scale, rng=rng, noise=args.noise)
+        obs, obj_pars, wt, obs_im, jacobian = make_data(psf=psf, psf_obs=psf_obs, stamp_size=stamp_size, wcs=wcs, scale=scale, rng=rng, noise=args.noise)
+
         flag = np.zeros_like(wt)
 
         stamp.gals.append(obs_im)
         stamp.weights.append(wt)
         stamp.flags.append(flag)
         stamp.psfs.append(psf_im)
-        wcs = jacobian.get_galsim_wcs()
+        
+   
         stamp.jacobs.append(wcs)
 
     stamp.bkg_sub = False
@@ -89,7 +99,7 @@ def main():
 
     # fit the object to an exponential disk
     # fit using the levenberg marquards algorithm
-    fitter = ngmix.fitting.Fitter(model='fitgauss', prior=prior)
+    fitter = ngmix.fitting.Fitter(model='gauss', prior=prior)
     # make parameter guesses based on a psf flux and a rough T
     guesser = ngmix.guessers.TPSFFluxAndPriorGuesser(
         rng=rng,
@@ -123,6 +133,7 @@ def main():
         psf_runner=psf_runner,
         rng=rng,
         ignore_failed_psf=True,
+        psf='gauss'
     )
 
     res, obsdict = boot.go(gal_obs_list)
@@ -182,7 +193,7 @@ def get_prior(*, rng, scale, T_range=None, F_range=None, nband=None):
     return prior
 
 
-def make_psf(rng, scale=1.0):
+def make_psf(rng, stamp_size, wcs):
     """Make PSF
 
     Simulate MoffatPSF.
@@ -197,16 +208,27 @@ def make_psf(rng, scale=1.0):
         g1=-0.01,
         g2=-0.01,
     )
-
-    psf_im = psf.drawImage(scale=scale).array
+    
+    #psf_im = psf.drawImage(scale=scale).array
+    psf_im = psf.drawImage(nx=stamp_size, ny=stamp_size, wcs=wcs).array
+    # add noise
     psf_im += rng.normal(scale=psf_noise, size=psf_im.shape)
 
     psf_wt = psf_im*0 + 1.0/psf_noise**2
 
     psf_cen = (np.array(psf_im.shape)-1.0)/2.0
-    psf_jacobian = ngmix.DiagonalJacobian(
-        row=psf_cen[0], col=psf_cen[1], scale=scale,
+
+    psf_jacobian = ngmix.Jacobian(
+        x=psf_cen[1], 
+        y=psf_cen[0], 
+        wcs=wcs.jacobian(
+            image_pos=galsim.PositionD(psf_cen[1], psf_cen[0])
+        ),
     )
+
+    #psf_jacobian = ngmix.DiagonalJacobian(
+    #    row=psf_cen[0], col=psf_cen[1], scale=scale,
+    #)
 
     psf_obs = ngmix.Observation(
         psf_im,
@@ -217,7 +239,7 @@ def make_psf(rng, scale=1.0):
     return psf, psf_obs, psf_im
 
 
-def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.0):
+def make_data(rng, noise, psf, psf_obs, stamp_size, wcs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.0):
     """
     simulate an exponential object convolved with the psf
 
@@ -256,15 +278,17 @@ def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.
 
     obj = galsim.Convolve(psf, obj0)
 
-    im = obj.drawImage(scale=scale).array
+    im = obj.drawImage(nx=stamp_size, ny=stamp_size, wcs=wcs).array
+    # add noise
     im += rng.normal(scale=noise, size=im.shape)
 
     cen = (np.array(im.shape)-1.0)/2.0
 
-    jacobian = ngmix.DiagonalJacobian(
-        row=cen[0] + dy/scale, col=cen[1] + dx/scale, scale=scale,
+    jacobian = ngmix.Jacobian(
+        x=cen[1], y=cen[0], wcs=wcs.jacobian(
+            image_pos=galsim.PositionD(cen[1], cen[0])
+        ),
     )
-
     noise = sigma_mad(im)
     wt = im*0 + 1.0 / noise ** 2
 

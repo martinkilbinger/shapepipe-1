@@ -6,7 +6,7 @@ from modopt.math.stats import sigma_mad
 from sqlitedict import SqliteDict
 
 class Tile_cat():
- """Postage stamps.
+    """Postage stamps.
     we have two main types of info- sextractor info and the vignet info. we want to store the sextractor stuff in an object so it is easy to access
     I think we can ignore the tile cat stuff if we expand the fits reader, then it is an object we want to pass to the postage stamp maker
 
@@ -17,20 +17,18 @@ class Tile_cat():
     remove objects that are more than 1/3 masked
     converting a weight map into a variance map by looking at the noise
 
-
     Parameters
     ----------
     paths to data, processing steps that we want
     array of postage stamps, whih are themselves arrays of epochs
 
     """
- 
-def __init__(
+    def __init__(
         self, 
         cat_path,
-        bkg_sub
-        megacam_flip
-        ):
+        bkg_sub,
+        megacam_flip,
+    ):
 
         self.cat_path = cat_path
         self.bkg_sub = bkg_sub
@@ -40,7 +38,7 @@ def __init__(
         self.tile_vignet
         dtype = [('obj_id','i4'),('ra','>f8'),('dec','>f8'),('flux','>f4'),('VIGNET', '>f4', (51, 51))]
         #self.tile_data = np.recarray(())
-    
+
     @classmethod
     def get_data(self, cat_path):
         tile_cat = file_io.FITSCatalogue(
@@ -341,7 +339,13 @@ def get_noise(background_vignet):
 
     return sig_noise
 
-def prepare_ngmix_weights(gal,weight,flag,weight_type):
+def prepare_ngmix_weights(
+    gal,
+    weight,
+    flag,
+    weight_type='megapipe',
+    symmetrize_mask=False
+):
     """bookkeeping for ngmix weights. runs on a single galaxy and epoch
         pixel scale and galaxy guess
         TO DO: decide if we want galaxy guess stuff
@@ -354,10 +358,10 @@ def prepare_ngmix_weights(gal,weight,flag,weight_type):
         weight image  List indices run over epochs
     flag : numpy.ndarray
         flag image.  List indices run over epochs   
-    weight_type : str
-        'THELI' or 'megapipe' 
-    symmetrize_mask : bool
-        'True' if mask will be symmetrized
+    weight_type : str, optional
+        'THELI' or 'megapipe' (default)
+    symmetrize_mask : bool, optional
+        'True' if mask will be symmetrized; default is ``False``
 
     Returns
     -------
@@ -373,9 +377,9 @@ def prepare_ngmix_weights(gal,weight,flag,weight_type):
     weight_map = np.copy(weight)
     if symmetrize_mask:
         #### add ask symmetrization here
+        pass
     weight_map[np.where(flag != 0)] = 0.
 
-    #else:
     if weight_type == 'THELI':
         sig_noise = sextractor_sky_background_dev(filename)
     elif weight_type == 'megapipe':

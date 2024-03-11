@@ -325,11 +325,10 @@ def make_ngmix_observation(gal,weight,flag,psf,wcs):
 
     ################This should be done when we make the stamps
     # prepare weight map
-    gal_masked, weight_map, noise_img = prepare_ngmix_weights(
+    gal_masked, weight_map, noise_img = postage_stamp.prepare_ngmix_weights(
         gal,
         weight,
         flag,
-        None,
     )
     # WHY RECENTER???
    
@@ -346,58 +345,6 @@ def make_ngmix_observation(gal,weight,flag,psf,wcs):
  
     return gal_obs
 
-<<<<<<< HEAD
-def average_multiepoch_psf(obsdict, nepoch):
-    """ averages psf information over multiple epochs
-    we may need to do this for original psf as well
-    Parameters
-    ----------
-    obsdict : dict
-        dictionary of metacal observations after fit
-
-    Returns
-    -------
-    dict
-        Average psf size, shape over n_epochs
-
-    """
-    # create dictionary
-    names = ['T_psf', 'T_psf_err', 'g_psf', 'g_psf_err']
-    psf_dict = {k: [] for k in names}
-    # include relevant psf quantities- check how they are presented for multi-epoch observations
-    wsum = 0
-    g_psf_sum = np.array([0., 0.])
-    g_psf_err_sum = np.array([0., 0.])
-    T_psf_sum = 0
-    T_psf_err_sum = 0
-    for n_e in np.arange(nepoch):
-        T_psf=obsdict['noshear'][n_e].psf.meta['result']['T']
-        T_psf_err=obsdict['noshear'][n_e].psf.meta['result']['T_err']
-        g_psf=obsdict['noshear'][n_e].psf.meta['result']['g']
-        g_psf_err=obsdict['noshear'][n_e].psf.meta['result']['g_err']
-        ne_wsum = obsdict['noshear'][0].weight.sum()
-
-        # we probably want to handle cases when there is no psf
-        # how are we dealing with the error, what is npsf
-        wsum += ne_wsum
-        g_psf_sum += g_psf * ne_wsum
-        g_psf_err_sum += g_psf_err * ne_wsum
-        T_psf_sum += T_psf * ne_wsum
-        T_psf_err_sum += T_psf_err * ne_wsum
-
-    if wsum == 0:
-        raise ZeroDivisionError('Sum of weights = 0, division by zero')
-
-    psf_dict['g_psf'] = g_psf_sum / wsum
-    psf_dict['g_psf_err'] = g_psf_err_sum / wsum
-    psf_dict['T_psf'] = T_psf_sum / wsum
-    psf_dict['T_psf_err'] = T_psf_err_sum / wsum    
-
-    return psf_dict      
-
-
-=======
->>>>>>> lucie/ngmix_update
 def do_ngmix_metacal(
     stamp,
     prior,
@@ -491,7 +438,7 @@ def do_ngmix_metacal(
     # this is the actual fit
     resdict, obsdict = boot.go(gal_obs_list)
     # compile results to include psf information
-    psf_res = average_multiepoch_psf(obsdict, n_epoch)
+    psf_res = ngmix_postprocess.average_multiepoch_psf(obsdict, n_epoch)
 
     return resdict, obsdict, psf_res
 

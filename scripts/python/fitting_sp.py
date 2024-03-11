@@ -28,14 +28,18 @@ import numpy as np
 import galsim
 import ngmix
 
-from shapepipe.modules.ngmix_package.ngmix import *
+from modopt.math.stats import sigma_mad
+from shapepipe.modules.ngmix_package import ngmix as spng
+from shapepipe.modules.ngmix_package import postage_stamp as spng_ps
+
+
 
 def main():
 
     args = get_args()
     rng = np.random.RandomState(args.seed)
 
-    stamp = Postage_stamp()
+    stamp = spng_ps.Postage_stamp()
 
     nepoch = 3
 
@@ -68,7 +72,7 @@ def main():
         stamp.weights[iepoch] *= noise ** 2
     print('MKDEBUG 2 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
     print("Calling sp ngmix MetacalBootstrapper")
-    res, obsdict, psf_res = do_ngmix_metacal(stamp, prior, flux, rng)
+    res, obsdict, psf_res = spng.do_ngmix_metacal(stamp, prior, flux, rng)
     print('MKDEBUG 3 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
     for iepoch in range(nepoch):
         noise = sigma_mad(stamp.gals[iepoch])

@@ -24,18 +24,18 @@ A run of the code should produce output something like thid
     true g2: -0.02 meas g2: -0.0261123 +/- 0.0095837 (99.7% conf)
     true fracdev: 0.5 meas fracdev: 0.514028 +/- 0.011873 (99.7% conf)
 """
+
 import numpy as np
 import galsim
 import ngmix
-
 from modopt.math.stats import sigma_mad
 from shapepipe.modules.ngmix_package import ngmix as spng
 from shapepipe.modules.ngmix_package import postage_stamp as spng_ps
 
 
-
 def main():
 
+    print(" === fitting_sp.py ===")
     args = get_args()
     rng = np.random.RandomState(args.seed)
 
@@ -46,32 +46,86 @@ def main():
     scale = 0.263
     flux = 100
 
+    g1 = -0.02
+    g2 = 0.05
+
+    n_pix = 44
+    n_stamp = np.array([n_pix] * 2)
+    cen = (n_stamp - 1) / 2
+    prior = get_prior(rng=rng, scale=scale)
+    psf = []
+    psf_obs = []
+    psf_im = []
+    obs = []
+    wt = []
+    obs_im = []
+    jacobian = []
+
     for iepoch in range(nepoch):
-        psf, psf_obs, psf_im = make_psf(rng=rng, scale=scale)
+        this_psf, this_psf_obs, this_psf_im = make_psf(rng, scale=scale)
 
-        obs, obj_pars, wt, obs_im, jacobian = make_data(psf=psf, psf_obs=psf_obs, scale=scale, rng=rng, noise=args.noise)
-        flag = np.zeros_like(wt)
+        dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        this_jacobian = ngmix.DiagonalJacobian(
+            row=cen[0] + dy/scale, col=cen[1] + dx/scale, scale=scale,
+        )
 
-        stamp.gals.append(obs_im)
-        stamp.weights.append(wt)
+        noise = args.noise
+        this_obs, this_wt, this_obs_im = make_data(rng, noise, this_psf, this_psf_obs, this_jacobian, dx, dy, g1, g2, scale=scale)
+
+        if any(this_obs_im.shape != n_stamp):
+            raise ValueError(f"gal image has wrong size: {this_obs_im.shape}")
+        #if any(this_psf_im.shape != n_stamp):
+            #raise ValueError(f"psf image has wrong size: {this_psf_im.shape}")
+        if iepoch == 0:
+            print(f"psf image : {this_psf_im.shape}")
+
+        psf.append(this_psf)
+        psf_obs.append(this_psf_obs)
+        psf_im.append(this_psf_im)
+        obs.append(this_obs)
+        wt.append(this_wt)
+        obs_im.append(this_obs_im)
+        jacobian.append(this_jacobian)
+
+    obj_pars = get_obj_pars(g1, g2, flux, 0, 0)
+
+    res, obsdict = fit_shapes_sp(args, rng, nepoch, scale, flux, prior, obs_im, wt, psf_im, jacobian, stamp)
+    print_results(res, obsdict, obj_pars)
+
+    res, obsdict = fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, wt, psf_im)
+    print_results(res, obsdict, obj_pars)
+
+
+def fit_shapes_sp(args, rng, nepoch, scale, flux, prior, obs_im, wt, psf_im, jacobian, stamp):
+
+    for iepoch in range(nepoch):
+        flag = np.zeros_like(wt[iepoch])
+
+        stamp.gals.append(obs_im[iepoch])
+        stamp.weights.append(wt[iepoch])
         stamp.flags.append(flag)
-        stamp.psfs.append(psf_im)
-        wcs = jacobian.get_galsim_wcs()
+        stamp.psfs.append(psf_im[iepoch])
+        wcs = jacobian[iepoch].get_galsim_wcs()
         stamp.jacobs.append(wcs)
 
     stamp.bkg_sub = False
-    stamp.megacam_flip = False
+    stamp.megacam_flip = True
 
-    prior = get_prior(rng=rng, scale=obs.jacobian.scale)
 
-    # Call ShapePipe ngmix function 
+    # Call ShapePipe ngmix functions 
+
     print('MKDEBUG 1 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+
+    # Multiply weights by noise variance, to compensate inverse-variance weighting
+    # in sp ngmix
     for iepoch in range(nepoch):
+        # sigma_mad estimates input noise ok
         noise = sigma_mad(stamp.gals[iepoch])
-        #noise = args.noise
+        print(iepoch, noise, args.noise)
         stamp.weights[iepoch] *= noise ** 2
+        psf='fitgauss',
     print('MKDEBUG 2 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
-    print("Calling sp ngmix MetacalBootstrapper")
+    print("Calling sp do_ngmix_metacal")
     res, obsdict, psf_res = spng.do_ngmix_metacal(stamp, prior, flux, rng)
     print('MKDEBUG 3 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
     for iepoch in range(nepoch):
@@ -79,15 +133,19 @@ def main():
         #noise = args.noise
         stamp.weights[iepoch] /= noise ** 2
     print('MKDEBUG 4 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
-    print_results(res, obsdict, obj_pars)
+
+    return res, obsdict
+
+
+def fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, wt, psf_im):
 
     # Local ngmix runner
     gal_obs_list = ngmix.observation.ObsList()
-    for i in np.arange(nepoch):
-        gal_obs_list.append(obs)
-    print(len(gal_obs_list))
 
-    # fit the object to an exponential disk
+    for iepoch in range(nepoch):
+        gal_obs_list.append(obs[iepoch])
+
+    # fit the object
     # fit using the levenberg marquards algorithm
     fitter = ngmix.fitting.Fitter(model='gauss', prior=prior)
     # make parameter guesses based on a psf flux and a rough T
@@ -117,16 +175,16 @@ def main():
     )
 
     # this bootstraps the process, first fitting psfs then the object
-    print("Calling fitting_sp MetacalBootstrapper")                          
+    print("Calling ngmix MetacalBootstrapper")                          
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner,
         psf_runner=psf_runner,
         rng=rng,
         ignore_failed_psf=True,
     )
+        #psf='fitgauss',
 
     res, obsdict = boot.go(gal_obs_list)
-    print_results(res, obsdict, obj_pars)
 
 
     if args.show:
@@ -139,7 +197,9 @@ def main():
 
         images.compare_images(obs.image, imfit)
 
+    return res, obsdict
 
+# Same function as Ngmix.get_prior()
 def get_prior(*, rng, scale, T_range=None, F_range=None, nband=None):
     """
     get a prior for use with the maximum likelihood fitter
@@ -162,7 +222,8 @@ def get_prior(*, rng, scale, T_range=None, F_range=None, nband=None):
     if F_range is None:
         F_range = [-100.0, 1.e9]
 
-    g_prior = ngmix.priors.GPriorBA(sigma=0.1, rng=rng)
+    # sigma was 0.1
+    g_prior = ngmix.priors.GPriorBA(sigma=0.4, rng=rng)
     cen_prior = ngmix.priors.CenPrior(
         cen1=0, cen2=0, sigma1=scale, sigma2=scale, rng=rng,
     )
@@ -217,7 +278,7 @@ def make_psf(rng, scale=1.0):
     return psf, psf_obs, psf_im
 
 
-def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.0):
+def make_data(rng, noise, psf, psf_obs, jacobian, dx, dy, g1, g2, scale=1.0, flux=100.0):
     """
     simulate an exponential object convolved with the psf
 
@@ -240,7 +301,6 @@ def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.
 
     """
     gal_hlr = 0.5
-    dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
 
     #obj0 = galsim.Gaussian(
     obj0 = galsim.Exponential(
@@ -261,10 +321,6 @@ def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.
 
     cen = (np.array(im.shape)-1.0)/2.0
 
-    jacobian = ngmix.DiagonalJacobian(
-        row=cen[0] + dy/scale, col=cen[1] + dx/scale, scale=scale,
-    )
-
     noise = sigma_mad(im)
     wt = im*0 + 1.0 / noise ** 2
 
@@ -278,6 +334,11 @@ def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.
         noise=noise_img,
     )
 
+    return obs, wt, im
+
+
+def get_obj_pars(g1, g2, flux, dx, dy):
+
     obj_pars = {
         'g1': g1,
         'g2': g2,
@@ -286,20 +347,21 @@ def make_data(rng, noise, psf, psf_obs, scale=1.0, g1=-0.02, g2=+0.05, flux=100.
         'dy': dy,
     }
 
-    return obs, obj_pars, wt, im, jacobian
+    return obj_pars
+
 
 
 def print_results(res, obsdict, obj_pars):
 
     print("===== results =====")
-    print(obj_pars)
-    print(res['noshear']['pars'])
-    print('obs image shape', obsdict['noshear'][0].image.shape)
-    print('obs image sum', obsdict['noshear'][0].image.sum())
+    #print(obj_pars)
+    #print(res['noshear']['pars'])
+    #print('obs image shape', obsdict['noshear'][0].image.shape)
+    #print('obs image sum', obsdict['noshear'][0].image.sum())
     print('obs noise std', obsdict['noshear'][0].noise.std())
     print('obs weight std', obsdict['noshear'][0].weight.std())
     print(f"obs weight sum {obsdict['noshear'][0].weight.sum():.2e}")
-    print('obs weight 0', obsdict['noshear'][0].weight[0][0])
+    print('obs weight[0[0]', obsdict['noshear'][0].weight[0][0])
     print('S/N:', res['noshear']['s2n'])
     print('true flux: %g meas flux: %g +/- %g (99.7%% conf)' % (
         obj_pars['flux'], res['noshear']['flux'], res['noshear']['flux_err']*3,

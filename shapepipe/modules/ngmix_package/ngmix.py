@@ -100,6 +100,7 @@ class Ngmix(object):
         self._output_dir = output_dir
         self._file_number_string = file_number_string
         self._zero_point = zero_point
+        self._pixel_scale = pixel_scale
 
         #self._f_wcs_path = f_wcs_path
         self._id_obj_min = id_obj_min
@@ -136,8 +137,8 @@ class Ngmix(object):
         cen_prior = ngmix.priors.CenPrior(
             cen1=0.0, 
             cen2=0.0, 
-            sigma1=self.scale, 
-            sigma2=self.scale, 
+            sigma1=self._pixel_scale, 
+            sigma2=self._pixel_scale, 
             rng=self._rng
         )
         
@@ -381,7 +382,10 @@ def do_ngmix_metacal(
         raise ValueError("0 epoch to process")
 
     # fitting options go here, make an option for the future
+    # 'gauss': deterministic algorithm to set Gaussian; WCS bug
+    # 'fit_gauss': fit + circulize + dilate PSF, no WCS bug
     psf_model = 'gauss'
+
     gal_model = 'gauss'
 
     # Construct multi-epoch observation object to pass to ngmix 

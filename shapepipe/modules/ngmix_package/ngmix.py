@@ -255,7 +255,7 @@ class Ngmix(object):
             if len(stamp.gals) == 0:
                 continue
             try:
-                res, psf_res = do_ngmix_metacal(
+                res, obsdict, psf_res = do_ngmix_metacal(
                     stamp,
                     prior,
                     tile_cat.flux[i_tile],
@@ -284,6 +284,7 @@ class Ngmix(object):
 
         # Save results
         self.save_results(res_dict)
+
 
 def make_ngmix_observation(gal,weight,flag,psf,wcs):
     """single galaxy and epoch to be passed to ngmix
@@ -324,10 +325,10 @@ def make_ngmix_observation(gal,weight,flag,psf,wcs):
 
     ################This should be done when we make the stamps
     # prepare weight map
-    gal_masked, weight_map, noise_img = prepare_ngmix_weights(
+    gal_masked, weight_map, noise_img = postage_stamp.prepare_ngmix_weights(
         gal,
         weight,
-        flag
+        flag,
     )
     # WHY RECENTER???
    
@@ -425,27 +426,20 @@ def do_ngmix_metacal(
         fitter=fitter, guesser=guesser,
         ntry=5,
     )
-    # metacal specific parameters
-    metacal_pars = {
-        'types': ['noshear', '1p', '1m', '2p', '2m'],
-        'step': 0.01,
-        'psf': 'fitgauss',
-        'fixnoise': True,
-        'use_noise_image': True
-    }
 
     # this "bootstrapper" runs the metacal image shearing as well as both psf
     # and object measurements
     boot = ngmix.metacal.MetacalBootstrapper(
-        metacal_pars,
         runner=runner, 
         psf_runner=psf_runner,
+        rng=rng,
         ignore_failed_psf=True,
-        rng=rng
     )
     # this is the actual fit
     resdict, obsdict = boot.go(gal_obs_list)
     # compile results to include psf information
-    psf_res = average_multiepoch_psf(obsdict)
-    return resdict, psf_res
+    psf_res = ngmix_postprocess.average_multiepoch_psf(obsdict, n_epoch)
+
+    return resdict, obsdict, psf_res
+
 

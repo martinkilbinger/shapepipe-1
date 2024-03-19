@@ -26,6 +26,8 @@ A run of the code should produce output something like thid
 """
 
 import numpy as np
+import matplotlib.pylab as plt
+
 import galsim
 import ngmix
 from modopt.math.stats import sigma_mad
@@ -39,14 +41,11 @@ def main():
     args = get_args()
     rng = np.random.RandomState(args.seed)
 
-    stamp = spng_ps.Postage_stamp()
-
     nepoch = 3
 
     scale = 0.263
     flux = 100
     stamp_size = 53
-
 
     wcs = galsim.JacobianWCS(
         -0.00105142719975775,
@@ -58,60 +57,138 @@ def main():
     g1 = -0.02
     g2 = 0.05
 
+
+    n_run = 25
+
+    results = {}
+    obsdicts = {}
+    pipelines = ["sp", "ng"]
+    for key in pipelines:
+        results[key] = []
+        obsdicts[key] = []
+
+    # Run shape measurement pipelines
+    for i_run in range(n_run):
+
+        print(f"===== Run {i_run}/{n_run} =====")
+
+        prior = get_prior(rng=rng, scale=scale)
+
+        stamp, obs = make_stamp(rng, nepoch, scale, flux, args.noise, stamp_size, g1, g2, wcs)
+
+        # Fit shape using ShapePipe ngmix module
+        res, obsdict = fit_shapes_sp(args, rng, nepoch, scale, flux, prior, stamp)
+        results["sp"].append(res)
+        obsdicts["sp"].append(obsdict)
+
+        # Fit shape using ngmix package
+        res, obsdict = fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, stamp.psfs)
+        results["ng"].append(res)
+        obsdicts["ng"].append(obsdict)
+
+    # Print results
+    obj_pars = get_obj_pars(g1, g2, flux, 0, 0)
+    for i_run in range(n_run):
+        for key in results:
+            print_results(results[key][i_run], obsdicts[key][i_run], key, obj_pars)
+
+    summary = summary_runs_all(results)
+    print(summary)
+
+    plot_g1g2(summary, obj_pars)
+
+
+def plot_g1g2(summary, obj_pars):
+
+    plt.figure()
+
+    x = []
+    y = []
+    dx = []
+    dy = []
+
+    for key in summary:
+        x = summary[key]["g_mean"][0]
+        dx = summary[key]["g_std"][0]
+        y = summary[key]["g_mean"][1]
+        dy = summary[key]["g_std"][1]
+        plt.errorbar(x, y, xerr=dx, yerr=dy, label=key)
+
+    plt.scatter(obj_pars["g1"], obj_pars["g2"])
+
+    plt.xlabel(r"$g_1$")
+    plt.ylabel(r"$g_2$")
+    plt.legend()
+    plt.savefig("g1g2.png")
+
+def summary_runs(results):
+
+    summary = {
+        "g_mean" : np.zeros(2),
+        "g_std" : np.zeros(2),
+    }
+
+    n_run = len(results)
+    for comp in (0, 1):
+        summary["g_mean"][comp] = np.mean(
+            [results[idx]["noshear"]["g"][comp] for idx in range(n_run)]
+        )
+        summary["g_std"][comp] = np.std(
+            [results[idx]["noshear"]["g"][comp] for idx in range(n_run)]
+        )
+        
+    return summary
+
+
+def summary_runs_all(results):
+
+    summary = {}
+
+    for key in results:
+        summary[key] = summary_runs(results[key])
+
+    return summary
+
+
+def make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs):
+
+    stamp = spng_ps.Postage_stamp()
+
     stamp_size_xy = np.array([stamp_size] * 2)
     prior = get_prior(rng=rng, scale=scale)
-    psf = []
-    psf_obs = []
-    psf_im = []
     obs = []
-    wt = []
-    obs_im = []
-    jacobian = []
 
     for iepoch in range(nepoch):
         this_psf, this_psf_obs, this_psf_im = make_psf(rng, stamp_size, wcs)
 
         dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
 
-        noise = args.noise
-        this_obs, this_wt, this_obs_im, this_jacobian = make_data(rng, noise, this_psf, this_psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=scale, flux=flux)
+        this_obs, this_wt, this_jacobian = make_data(rng, noise, this_psf, this_psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=scale, flux=flux)
 
         # Make sure all postage stamps have the same size
-        if any(this_obs_im.shape != stamp_size_xy):
-            raise ValueError(f"gal image has wrong size: {this_obs_im.shape}")
+        if any(this_obs.image.shape != stamp_size_xy):
+            raise ValueError(f"gal image has wrong size: {this_obs.image.shape}")
         if any(this_psf_im.shape != stamp_size_xy):
             raise ValueError(f"psf image has wrong size: {this_psf_im.shape}")
 
-        psf.append(this_psf)
-        psf_obs.append(this_psf_obs)
-        psf_im.append(this_psf_im)
+        # obs used in ngmix package
         obs.append(this_obs)
-        wt.append(this_wt)
-        obs_im.append(this_obs_im)
-        jacobian.append(this_jacobian)
-
-    obj_pars = get_obj_pars(g1, g2, flux, 0, 0)
-
-    # Fit shape using ShapePipe ngmix module
-    res, obsdict = fit_shapes_sp(args, rng, nepoch, scale, flux, prior, obs_im, wt, psf_im, jacobian, stamp)
-    print_results(res, obsdict, obj_pars)
-
-    # Fit shape using ngmix package
-    res, obsdict = fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, wt, psf_im)
-    print_results(res, obsdict, obj_pars)
+        stamp.gals.append(this_obs.image)
+        stamp.psfs.append(this_psf_im)
+        stamp.weights.append(this_wt)
+        stamp.jacobs.append(this_jacobian.get_galsim_wcs())
 
 
-def fit_shapes_sp(args, rng, nepoch, scale, flux, prior, obs_im, wt, psf_im, jacobian, stamp):
 
+    return stamp, obs
+
+
+def fit_shapes_sp(args, rng, nepoch, scale, flux, prior, stamp):
+
+    # Create (empty) flag arrays
     for iepoch in range(nepoch):
-        flag = np.zeros_like(wt[iepoch])
-
-        stamp.gals.append(obs_im[iepoch])
-        stamp.weights.append(wt[iepoch])
+        flag = np.zeros_like(stamp.weights[iepoch])
         stamp.flags.append(flag)
-        stamp.psfs.append(psf_im[iepoch])
-        wcs = jacobian[iepoch].get_galsim_wcs()
-        stamp.jacobs.append(wcs)
 
     stamp.bkg_sub = False
     stamp.megacam_flip = True
@@ -119,33 +196,33 @@ def fit_shapes_sp(args, rng, nepoch, scale, flux, prior, obs_im, wt, psf_im, jac
 
     # Call ShapePipe ngmix functions 
 
-    print('MKDEBUG 1 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+    #print('MKDEBUG 1 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
 
     # Multiply weights by noise variance, to compensate inverse-variance weighting
     # in sp ngmix
     for iepoch in range(nepoch):
         # sigma_mad estimates input noise ok
         noise = sigma_mad(stamp.gals[iepoch])
-        print(iepoch, noise, args.noise)
+        #print(iepoch, noise, args.noise)
         stamp.weights[iepoch] *= noise ** 2
 
-    print('MKDEBUG 2 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+    #print('MKDEBUG 2 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
 
     print("Calling sp do_ngmix_metacal")
     res, obsdict, psf_res = spng.do_ngmix_metacal(stamp, prior, flux, rng)
 
     # Dividing weights by noise variance to undo above
-    print('MKDEBUG 3 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+    #print('MKDEBUG 3 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
     for iepoch in range(nepoch):
         noise = sigma_mad(stamp.gals[iepoch])
         stamp.weights[iepoch] /= noise ** 2
 
-    print('MKDEBUG 4 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
+    #print('MKDEBUG 4 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
 
     return res, obsdict
 
 
-def fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, wt, psf_im):
+def fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, psf_im):
 
     # Local ngmix runner
     gal_obs_list = ngmix.observation.ObsList()
@@ -207,6 +284,7 @@ def fit_shapes_ngmix(args, rng, nepoch, scale, flux, prior, obs, wt, psf_im):
         images.compare_images(obs.image, imfit)
 
     return res, obsdict
+
 
 # Same function as Ngmix.get_prior()
 def get_prior(*, rng, scale, T_range=None, F_range=None, nband=None):
@@ -350,7 +428,6 @@ def make_data(rng, noise, psf, psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=1
 
     noise_img = np.random.randn(*im.shape) * noise
 
-    #jacobian = ngmix.DiagonalJacobian(
     # No difference with or without scale (?)
     jacobian = ngmix.Jacobian(
         row=cen[0] + dy/scale,
@@ -358,6 +435,7 @@ def make_data(rng, noise, psf, psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=1
         scale=scale,
         wcs=wcs,
     )
+    # wcs and wcs.jacobian() seem to be the same
 
     obs = ngmix.Observation(
         im,
@@ -367,7 +445,7 @@ def make_data(rng, noise, psf, psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=1
         noise=noise_img,
     )
 
-    return obs, wt, im, jacobian
+    return obs, wt, jacobian
 
 
 def get_obj_pars(g1, g2, flux, dx, dy):
@@ -384,9 +462,9 @@ def get_obj_pars(g1, g2, flux, dx, dy):
 
 
 
-def print_results(res, obsdict, obj_pars):
+def print_results(res, obsdict, key, obj_pars):
 
-    print("===== results =====")
+    print(f"===== results {key} =====")
     #print(obj_pars)
     #print(res['noshear']['pars'])
     #print('obs image shape', obsdict['noshear'][0].image.shape)
@@ -410,7 +488,7 @@ def print_results(res, obsdict, obj_pars):
         + f"{(obj_pars['g1'] - res['noshear']['g'][0]) / res['noshear']['g_err'][0]:.2f},"
         + f" {(obj_pars['g2'] - res['noshear']['g'][1]) / res['noshear']['g_err'][1]:.2f})"
     )
-    print("===== done =====")
+    print()
 
 
 def get_args():

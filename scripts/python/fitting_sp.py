@@ -363,10 +363,6 @@ def make_psf(rng, stamp_size, wcs):
         ),
     )
 
-    #psf_jacobian = ngmix.DiagonalJacobian(
-    #    row=psf_cen[0], col=psf_cen[1], scale=scale,
-    #)
-
     psf_obs = ngmix.Observation(
         psf_im,
         weight=psf_wt,

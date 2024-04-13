@@ -64,8 +64,8 @@ class Vignet():
         weight_vignet_path,
         flag_vignet_path,
         f_wcs_path
-
     ):
+
         self.f_wcs_file = SqliteDict(f_wcs_path)
         self.gal_cat = SqliteDict(gal_vignet_path)
         self.bkg_cat = SqliteDict(bkg_vignet_path)
@@ -102,6 +102,7 @@ class Postage_stamp():
     """
     def __init__(
         self,
+        rng,
         bkg_sub=True,
         megacam_flip=True,
         mask_frac=1/3.0,
@@ -110,6 +111,7 @@ class Postage_stamp():
 
     ):
         
+        self.rng=rng
         self.bkg_sub=bkg_sub
         self.megacam_flip=megacam_flip
         self.mask_frac=mask_frac
@@ -123,7 +125,7 @@ class Postage_stamp():
         self.flags = []
         self.jacobs = []
 
-    def preprocess_postage_stamps(self, vignet, tile_cat, obj_id):
+    def preprocess_postage_stamp(self, vignet, tile_cat, obj_id):
         """preprocess stamps.
 
         runs per object over all epochs.

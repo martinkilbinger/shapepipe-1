@@ -340,8 +340,9 @@ def do_ngmix_metacal(
         raise ValueError("0 epoch to process")
 
     # fitting options go here, make an option for the future
-    psf_model = 'fitgauss'
-    gal_model = 'gauss'
+    model = 'gauss'
+    psf_model='fitgauss'
+    
 
     # Construct multi-epoch observation object to pass to ngmix 
     gal_obs_list = ObsList()
@@ -358,7 +359,7 @@ def do_ngmix_metacal(
         gal_obs_list.append(gal_obs)
    
     #  decide on fitting options
-    fitter = ngmix.fitting.Fitter(model=gal_model, prior=prior)
+    fitter = ngmix.fitting.Fitter(model=model, prior=prior)
     # make parameter guesses based on a psf flux and a rough T
     guesser = ngmix.guessers.TPSFFluxAndPriorGuesser(
         rng=rng,
@@ -367,7 +368,7 @@ def do_ngmix_metacal(
     )
 
     # psf fitting a gaussian
-    psf_fitter  = ngmix.fitting.Fitter(model=psf_model, prior=prior)
+    psf_fitter  = ngmix.fitting.Fitter(model=model, prior=prior)
     # TO DO! what do we do about size?                              
     psf_guesser = ngmix.guessers.TFluxGuesser(
         rng=rng,

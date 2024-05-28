@@ -14,13 +14,17 @@ dependencies:
   - joblib
   - libtool
   - matplotlib
-  - numba
+  - numba==0.55.2
   - numpy==1.22
+  - pandas==2.2.2
   - pip:
     - cs_util
+    - ngmix==2.3.1
+    - mccd==1.2.3
     - modopt
     - PyQt5
     - pyqtgraph
+    - python-pysap==0.2.1
     - reproject
     - skaha
     - sip_tpv
@@ -29,5 +33,5 @@ dependencies:
     - termcolor
     - tqdm
     - treecorr
-    - git+https://github.com/aguinot/ngmix@stable_version
+    - vos
     - git+https://github.com/tobias-liaudat/Stile@v0.1

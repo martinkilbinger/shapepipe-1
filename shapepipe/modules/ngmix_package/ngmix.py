@@ -6,10 +6,9 @@ This module contains a class for ngmix shape measurement.
 
 To list for changes to this module
 output dictionary is a mess
-make a class of CATALOG of postage stamps
-make horizontal access of postage stamps
+
 do tests on background- how bad is poisson noise
-postage stamp stuff should be separate file
+
 extract pixel scale from wcs
 do extra fit to ngmix psf and combine info in post processing
 
@@ -24,8 +23,8 @@ from astropy.io import fits
 from modopt.math.stats import sigma_mad
 from ngmix.observation import Observation, ObsList
 from sqlitedict import SqliteDict
-from . import ngmix_postprocess
-from . import postage_stamp
+from shapepipe.modules.ngmix_package import ngmix_postprocess
+from shapepipe.modules.ngmix_package import postage_stamp as ps
 
 from shapepipe.pipeline import file_io
 
@@ -56,6 +55,16 @@ class Ngmix(object):
     id_obj_max : int, optional
         Last galaxy ID to process, not used if the value is set to ``-1``;
         the default is ``-1``
+    bkg_sub: bool, optional
+        default is ``True`` for background subtraction
+    megacam_flip: bool, optional
+        default is ``True`` to flip megaprime coordinates with megapipe processing
+    mask_frac: float
+        maximum fraction of allowed masked pixels, default is 1/3
+    rescale_weights: bool
+        default is ``True`` to rescale weights into variance maps
+    symmetrize_mask: bool
+        ``True`` will symmetrize mask, default is ``False`` 
 
     Raises
     ------
@@ -73,7 +82,13 @@ class Ngmix(object):
         f_wcs_path,
         w_log,
         id_obj_min=-1,
-        id_obj_max=-1
+        id_obj_max=-1,
+        bkg_sub=True,
+        megacam_flip=True,
+        mask_frac=1/3.,
+        rescale_weights=True,
+        symmetrize_mask=False
+        
     ):
 
         if len(input_file_list) != 6:
@@ -83,7 +98,7 @@ class Ngmix(object):
             )
 
         self._tile_cat_path = input_file_list[0]
-        self._vignet_cat = Vignet(
+        self._vignet_cat = ps.Vignet(
             input_file_list[1],
             input_file_list[2],
             input_file_list[3],
@@ -91,18 +106,13 @@ class Ngmix(object):
             input_file_list[5],
             f_wcs_path
         )
-        #self._gal_vignet_path = input_file_list[1]
-        #self._bkg_vignet_path = input_file_list[2]
-        #self._psf_vignet_path = input_file_list[3]
-        #self._weight_vignet_path = input_file_list[4]
-        #self._flag_vignet_path = input_file_list[5]
 
         self._output_dir = output_dir
         self._file_number_string = file_number_string
         self._zero_point = zero_point
         self._pixel_scale = pixel_scale
 
-        #self._f_wcs_path = f_wcs_path
+        
         self._id_obj_min = id_obj_min
         self._id_obj_max = id_obj_max
 
@@ -218,8 +228,9 @@ class Ngmix(object):
 
         """
       
-        tile_cat = Tile_cat('')
-        # i would like to make this into an object vignet
+        tile_cat = ps.Tile_cat(self._tile_cat_path)
+        tile_cat.get_data()
+
         vignet_cat = self._vignet_cat  
 
         final_res = []
@@ -247,7 +258,15 @@ class Ngmix(object):
             
             # make postage stamp, skip if not observed
             try:
-                stamp = preprocess_postage_stamps(vignet_cat)
+                stamp=ps.Postage_stamp(
+                    self._rng,
+                    bkg_sub=True,
+                    megacam_flip=True,
+                    mask_frac=1/3.0,
+                    rescale_weights=True,
+                    symmetrize_mask=False
+                    )
+                stamp.preprocess_postage_stamps(vignet_cat, tile_cat, obj_id)
             except AttributeError:
                 continue
             
@@ -256,7 +275,7 @@ class Ngmix(object):
             if len(stamp.gals) == 0:
                 continue
             try:
-                res, obsdict, psf_res = do_ngmix_metacal(
+                res, psf_res = do_ngmix_metacal(
                     stamp,
                     prior,
                     tile_cat.flux[i_tile],
@@ -285,66 +304,6 @@ class Ngmix(object):
 
         # Save results
         self.save_results(res_dict)
-
-
-def make_ngmix_observation(gal,weight,flag,psf,wcs):
-    """single galaxy and epoch to be passed to ngmix
-    TO DO: pixel scale
-    Parameters
-    ----------
-    gal : numpy.ndarray
-        List of the galaxy vignets.  List indices run over epochs
-    weight : numpy.ndarray
-        List of the PSF vignets
-    flag : numpy.ndarray
-        flag image
-    psf : numpy.ndarray
-        psf vignett
-    wcs : numpy.ndarray
-        Jacobian
-    Returns
-    -------
-    ngmix.observation.Observation
-        observation to fit using ngmix
-
-    """
-    # prepare psf
-    # WHY RECENTER
-    psf_jacob = ngmix.Jacobian(
-        row=(psf.shape[0] - 1) / 2,
-        col=(psf.shape[1] - 1) / 2,
-        wcs=wcs
-    )
-     # Recenter jacobian if necessary
-    gal_jacob = ngmix.Jacobian(
-        row=(gal.shape[0] - 1) / 2,
-        col=(gal.shape[1] - 1) / 2,
-        wcs=wcs
-    )
-
-    psf_obs = Observation(psf, jacobian=psf_jacob)
-
-    ################This should be done when we make the stamps
-    # prepare weight map
-    gal_masked, weight_map, noise_img = postage_stamp.prepare_ngmix_weights(
-        gal,
-        weight,
-        flag,
-    )
-    # WHY RECENTER???
-   
-
-    #########################
-    # define ngmix observation
-    gal_obs = Observation(
-        gal_masked,
-        weight=weight_map,
-        jacobian=gal_jacob,
-        psf=psf_obs,
-        noise=noise_img
-    )
- 
-    return gal_obs
 
 def do_ngmix_metacal(
     stamp,
@@ -382,28 +341,26 @@ def do_ngmix_metacal(
         raise ValueError("0 epoch to process")
 
     # fitting options go here, make an option for the future
-    # 'gauss': deterministic algorithm to set Gaussian; WCS bug
-    # 'fit_gauss': fit + circulize + dilate PSF, no WCS bug
-    psf_model = 'gauss'
-
-    gal_model = 'gauss'
+    model = 'gauss'
+    psf_model='fitgauss'
+    
 
     # Construct multi-epoch observation object to pass to ngmix 
     gal_obs_list = ObsList()
 
-    # create list of ngmix observations for each galaxy- this will change with stamp bookkeeping
+    # create list of ngmix observations for each galaxy- this maycd  change with stamp bookkeeping
     for n_e in range(n_epoch):
-        gal_obs = make_ngmix_observation(
+        gal_obs = _make_ngmix_observation(
             stamp.gals[n_e],
             stamp.weights[n_e],
-            stamp.flags[n_e],
             stamp.psfs[n_e],
-            stamp.jacobs[n_e]
+            stamp.jacobs[n_e],
+            stamp.noise_ims[n_e]
         )
         gal_obs_list.append(gal_obs)
    
     #  decide on fitting options
-    fitter = ngmix.fitting.Fitter(model=gal_model, prior=prior)
+    fitter = ngmix.fitting.Fitter(model=model, prior=prior)
     # make parameter guesses based on a psf flux and a rough T
     guesser = ngmix.guessers.TPSFFluxAndPriorGuesser(
         rng=rng,
@@ -412,7 +369,7 @@ def do_ngmix_metacal(
     )
 
     # psf fitting a gaussian
-    psf_fitter  = ngmix.fitting.Fitter(model=psf_model, prior=prior)
+    psf_fitter  = ngmix.fitting.Fitter(model=model, prior=prior)
     # TO DO! what do we do about size?                              
     psf_guesser = ngmix.guessers.TFluxGuesser(
         rng=rng,
@@ -438,6 +395,7 @@ def do_ngmix_metacal(
         psf_runner=psf_runner,
         rng=rng,
         ignore_failed_psf=True,
+        psf=psf_model
     )
     # this is the actual fit
     resdict, obsdict = boot.go(gal_obs_list)
@@ -445,5 +403,51 @@ def do_ngmix_metacal(
     psf_res = ngmix_postprocess.average_multiepoch_psf(obsdict, n_epoch)
 
     return resdict, obsdict, psf_res
+
+def _make_ngmix_observation(gal,weight,psf,wcs,noise_img):
+    """single galaxy and epoch to be passed to ngmix
+   
+    Parameters
+    ----------
+    gal : numpy.ndarray
+        List of the galaxy vignets.  List indices run over epochs
+    weight : numpy.ndarray
+        List of the PSF vignets
+    psf : numpy.ndarray
+        psf vignett
+    wcs : galsim.JacobianWCS
+        Jacobian
+    Returns
+    -------
+    ngmix.observation.Observation
+        observation to fit using ngmix
+
+    """
+    # prepare psf
+    # WHY RECENTER from detection center to tile center
+    psf_jacob = ngmix.Jacobian(
+        row=(psf.shape[0] - 1) / 2,
+        col=(psf.shape[1] - 1) / 2,
+        wcs=wcs
+    )
+     # Recenter jacobian if necessary
+    gal_jacob = ngmix.Jacobian(
+        row=(gal.shape[0] - 1) / 2,
+        col=(gal.shape[1] - 1) / 2,
+        wcs=wcs
+    )
+
+    psf_obs = Observation(psf, jacobian=psf_jacob)
+
+    # define ngmix observation
+    gal_obs = ngmix.Observation(
+        gal,
+        weight=weight,
+        jacobian=gal_jacob,
+        psf=psf_obs,
+        noise=noise_img
+    )
+ 
+    return gal_obs
 
 

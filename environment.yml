@@ -15,8 +15,8 @@ dependencies:
   - libtool
   - matplotlib
   - ngmix==2.3.0
-  - numba
-  - numpy==1.22
+  - numba==0.59.0
+  - numpy==1.26.4
   - pandas==1.4.1
   - pip:
     - cs_util
@@ -24,6 +24,9 @@ dependencies:
     - modopt
     - PyQt5
     - pyqtgraph
+    - pytest
+    - pytest-cov
+    - pytest-xdist
     - reproject
     - skaha
     - sip_tpv

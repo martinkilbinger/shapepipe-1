@@ -8,13 +8,13 @@ and then a psf flux for the object.  Then the object is fit including the PSF,
 so the inferred parameters are "pre-psf".  The guess for the fit is made
 based on the psf flux fit and a generic rough guess for size.
 
-To faciliate this bootstrapping process we define the fitters for psf and
+To facilitate this bootstrapping process we define the fitters for psf and
 object as well as objects to provide guesses.
 
 Bootstrappers are especially useful when you will perform the same fit on many
 objects.
 
-A run of the code should produce output something like thid
+A run of the code should produce output something like this
 
     > python fitting_bd_empsf.py
 
@@ -25,6 +25,7 @@ A run of the code should produce output something like thid
     true fracdev: 0.5 meas fracdev: 0.514028 +/- 0.011873 (99.7% conf)
 """
 
+import sys
 import numpy as np
 import matplotlib.pylab as plt
 
@@ -37,7 +38,7 @@ from shapepipe.modules.ngmix_package import postage_stamp as spng_ps
 
 def main():
 
-    print(" === fitting_sp.py ===")
+    print(" === fitting_sp_v2.py ===")
     args = get_args()
     rng = np.random.RandomState(args.seed)
 
@@ -47,18 +48,25 @@ def main():
     flux = 100
     stamp_size = 51
 
-    wcs = galsim.JacobianWCS(
-        -0.00105142719975775,
-        0.16467706437987895,
-        0.15681099855148395,
-        -0.0015749298342502371
-    )
+    if args.wcs == "weird":
+        dudx = -0.00105142719975775
+        dudy = 0.16467706437987895
+        dvdx = 0.15681099855148395
+        dvdy = -0.0015749298342502371
+    elif args.wcs == "diagonal":
+        dudx = scale
+        dudy = 0
+        dvdx = 0
+        dvdy = scale
+    else:
+        raise ValueError(f"WCS type {args.wcs} not implemented")
+    wcs = galsim.JacobianWCS(dudx, dudy, dvdx, dvdy)
 
     g1 = -0.02
     g2 = 0.05
 
 
-    n_run = 50
+    n_run = 25
 
     results = {}
     obsdicts = {}
@@ -100,7 +108,7 @@ def main():
     plot_g1g2(summary, obj_pars)
 
 
-def plot_g1g2(summary, obj_pars):
+def plot_g1g2(summary, obj_pars, truth=None):
 
     plt.figure()
 
@@ -114,10 +122,11 @@ def plot_g1g2(summary, obj_pars):
         dx = summary[key]["g_std"][0]
         y = summary[key]["g_mean"][1]
         dy = summary[key]["g_std"][1]
+        print(key, x, y)
         plt.errorbar(x, y, xerr=dx, yerr=dy, label=key)
 
-    plt.scatter(obj_pars["g1"], obj_pars["g2"])
-
+    plt.scatter(obj_pars["g1"], obj_pars["g2"], color="k", label="truth")
+    
     plt.xlabel(r"$g_1$")
     plt.ylabel(r"$g_2$")
     plt.legend()
@@ -163,8 +172,8 @@ def make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs):
     for iepoch in range(nepoch):
         this_psf, this_psf_obs, this_psf_im = make_psf(rng, stamp_size, wcs)
 
-        dy= dx = 0
-        #rng.uniform(low=-scale/2, high=scale/2, size=2)
+        dy = dx = 0
+        #dy, dx = rng.uniform(low=-scale/10, high=scale/10, size=2)
 
         this_obs, this_wt, this_noise = make_data(rng, noise, this_psf, this_psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=scale, flux=flux)
 
@@ -209,15 +218,7 @@ def fit_shapes_sp(args, rng, nepoch, scale, flux, prior, stamp):
             stamp.noise_ims[n_e]
         )
         gal_obs_list.append(gal_obs)
-    #print('MKDEBUG 1 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
 
-    # Multiply weights by noise variance, to compensate inverse-variance weighting
-    # in sp ngmix
-    #for iepoch in range(nepoch):
-        # sigma_mad estimates input noise ok
-        #noise = sigma_mad(stamp.gals[iepoch])
-        #print(iepoch, noise, args.noise)
-    #print('MKDEBUG 2 noise sum std', stamp.weights[0].sum(), stamp.weights[0].std())
     fitter = ngmix.fitting.Fitter(model='gauss', prior=prior)
     # make parameter guesses based on a psf flux and a rough T
     guesser = ngmix.guessers.TPSFFluxAndPriorGuesser(
@@ -246,7 +247,6 @@ def fit_shapes_sp(args, rng, nepoch, scale, flux, prior, stamp):
     )
 
     # this bootstraps the process, first fitting psfs then the object
-    print("Calling ngmix MetacalBootstrapper")                          
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner,
         psf_runner=psf_runner,
@@ -549,6 +549,8 @@ def get_args():
                         help='show plot comparing model and data')
     parser.add_argument('--noise', type=float, default=0.01,
                         help='noise for images')
+    parser.add_argument('--wcs', type=str, default="weird",
+                        help="WCS type, allower are 'diagnoal', 'weird' (default)")
     return parser.parse_args()
 
 

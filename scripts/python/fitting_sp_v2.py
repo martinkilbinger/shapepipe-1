@@ -44,7 +44,7 @@ def main():
 
     nepoch = 3
 
-    scale = 0.263
+    scale = 0.187
     flux = 100
     stamp_size = 51
 
@@ -66,7 +66,7 @@ def main():
     g2 = 0.05
 
 
-    n_run = 25
+    n_run = 10
 
     results = {}
     obsdicts = {}
@@ -105,10 +105,24 @@ def main():
     summary = summary_runs_all(results)
     print(summary)
 
+    print_bias(summary, obj_pars)
     plot_g1g2(summary, obj_pars)
 
 
-def plot_g1g2(summary, obj_pars, truth=None):
+def print_bias(summary, obj_pars):
+
+    print(f"Residual shear biases:")
+    print("code dg1     dg1/g1   dg2     dg2/g2")
+    print("------------------------------------")
+    for key in summary:
+        print(key, end="   ")
+        for comp in (1, 2):
+            delta_g = summary[key]["g_mean"][comp - 1] - obj_pars[f"g{comp}"]
+            delta_g_rel = delta_g / obj_pars[f"g{comp}"]
+            print(f"{delta_g:.4f} {delta_g_rel:.4f}", end="   ")
+        print()
+
+def plot_g1g2(summary, obj_pars):
 
     plt.figure()
 
@@ -116,14 +130,23 @@ def plot_g1g2(summary, obj_pars, truth=None):
     y = []
     dx = []
     dy = []
-
-    for key in summary:
+    symbols = ["o", "x"]
+    colors = ["blue", "orange"]
+    
+    for idx, key in enumerate(summary):
         x = summary[key]["g_mean"][0]
         dx = summary[key]["g_std"][0]
         y = summary[key]["g_mean"][1]
         dy = summary[key]["g_std"][1]
-        print(key, x, y)
-        plt.errorbar(x, y, xerr=dx, yerr=dy, label=key)
+        plt.errorbar(
+            x,
+            y,
+            xerr=dx,
+            yerr=dy,
+            color=colors[idx],
+            label=key
+        )
+        plt.plot(x, y, marker=symbols[idx], color=colors[idx])
 
     plt.scatter(obj_pars["g1"], obj_pars["g2"], color="k", label="truth")
     
@@ -449,8 +472,8 @@ def make_data(rng, noise, psf, psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=1
     """
     gal_hlr = 0.5
 
-    model_func = galsim.Gaussian
-    # model_func = galsim.Exponential
+    #model_func = galsim.Gaussian
+    model_func = galsim.Exponential
     
     obj0 = model_func(
         half_light_radius=gal_hlr,
@@ -541,14 +564,17 @@ def print_results(res, obsdict, key, obj_pars):
 
 
 def get_args():
+    
+    def_noise = 0.01
+    
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=42,
                         help='seed for rng')
     parser.add_argument('--show', action='store_true',
                         help='show plot comparing model and data')
-    parser.add_argument('--noise', type=float, default=0.01,
-                        help='noise for images')
+    parser.add_argument('--noise', type=float, default=def_noise,
+                        help=f'noise for images, default is {def_noise}')
     parser.add_argument('--wcs', type=str, default="weird",
                         help="WCS type, allower are 'diagnoal', 'weird' (default)")
     return parser.parse_args()

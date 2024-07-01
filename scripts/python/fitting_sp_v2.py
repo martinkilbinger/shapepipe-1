@@ -195,8 +195,8 @@ def make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs):
     for iepoch in range(nepoch):
         this_psf, this_psf_obs, this_psf_im = make_psf(rng, stamp_size, wcs)
 
-        dy = dx = 0
-        #dy, dx = rng.uniform(low=-scale/10, high=scale/10, size=2)
+        #dy = dx = 0
+        dy, dx = rng.uniform(low=-scale/10, high=scale/10, size=2)
 
         this_obs, this_wt, this_noise = make_data(rng, noise, this_psf, this_psf_obs, wcs, dx, dy, g1, g2, stamp_size, scale=scale, flux=flux)
 

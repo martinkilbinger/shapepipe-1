@@ -13,16 +13,6 @@ object as well as objects to provide guesses.
 
 Bootstrappers are especially useful when you will perform the same fit on many
 objects.
-
-A run of the code should produce output something like this
-
-    > python fitting_bd_empsf.py
-
-    S/N: 920.5078121454815
-    true flux: 100 meas flux: 95.3763 +/- 0.653535 (99.7% conf)
-    true g1: 0.05 meas g1: 0.0508 +/- 0.00960346 (99.7% conf)
-    true g2: -0.02 meas g2: -0.0261123 +/- 0.0095837 (99.7% conf)
-    true fracdev: 0.5 meas fracdev: 0.514028 +/- 0.011873 (99.7% conf)
 """
 
 import sys
@@ -38,7 +28,7 @@ from shapepipe.modules.ngmix_package import postage_stamp as spng_ps
 
 def main():
 
-    print(" === fitting_sp_v2.py ===")
+    print(" === fitting_sp_v3.py ===")
     args = get_args()
 
     # Pixel scale in arcsec
@@ -51,7 +41,8 @@ def main():
     nepoch = 1
 
     # Object's flux
-    flux_arr = [1, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25]
+    #flux_arr = [1, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25]
+    flux_arr = [1, 2, 3, 5, 8, 10]
 
     if args.wcs == "weird":
         dudx = -0.00105142719975775
@@ -79,15 +70,17 @@ def main():
     #g2 = 0.05
 
     # PSF full width half maximum in arcsec
-    psf_fwhm = 0.8
+    psf_fwhm = 0.68
 
     # Number of runs per galaxy
     n_run = 5
 
     with open("T.txt", "w") as f:
         print("# Flux SNR_sp T_sp T_err_sp SNR_ng T_ng T_ng_err", file=f)
+        
         for flux in flux_arr:
             results = run_object(args.seed, scale, args.noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run)
+            
             for i_run in range(n_run):
                 print(
                     f"{flux} {results['sp'][i_run]['noshear']['s2n']} {results['sp'][i_run]['noshear']['T']:g}"
@@ -127,7 +120,7 @@ def run_object(seed, scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs
 
         # Fit shape using ShapePipe ngmix module
         rng = np.random.RandomState(seed)
-        res, obsdict = fit_shapes_sp(rng, nepoch, scale, stamp, boot)
+        res, obsdict = fit_shapes_sp(rng, nepoch, scale, obs, stamp, boot)
         results["sp"].append(res)
         obsdicts["sp"].append(obsdict)
 
@@ -305,7 +298,54 @@ def get_bootstrap(rng, prior, flux):
     )
 
 
-def fit_shapes_sp(rng, nepoch, scale, stamp, boot):
+def my_make_ngmix_observation(gal,weight,psf,wcs,noise_img):                       
+    """single galaxy and epoch to be passed to ngmix                             
+
+    Parameters                                                                   
+    ----------                                                                   
+    gal : numpy.ndarray                                                          
+        List of the galaxy vignets.  List indices run over epochs                
+    weight : numpy.ndarray                                                       
+        List of the PSF vignets                                                  
+    psf : numpy.ndarray                                                          
+        psf vignett                                                              
+    wcs : galsim.JacobianWCS                                                     
+        Jacobian                                                                 
+    Returns                                                                      
+    -------                                                                      
+    ngmix.observation.Observation                                                
+        observation to fit using ngmix                                           
+    
+    """                                                                          
+    # prepare psf                                                                
+    # WHY RECENTER from detection center to tile center                          
+    psf_jacob = ngmix.Jacobian(                                                  
+        row=(psf.shape[0] - 1) / 2,                                              
+        col=(psf.shape[1] - 1) / 2,                                              
+        wcs=wcs                                                                  
+    )                                                                            
+    # Recenter jacobian if necessary                                            
+    gal_jacob = ngmix.Jacobian(                                                  
+        row=(gal.shape[0] - 1) / 2,                                              
+        col=(gal.shape[1] - 1) / 2,                                              
+        wcs=wcs                                                                  
+    )                                                                            
+    
+    psf_obs = ngmix.Observation(psf, jacobian=psf_jacob)                               
+    
+    # define ngmix observation                                                   
+    gal_obs = ngmix.Observation(                                                 
+        gal,                                                                     
+        weight=weight,                                                           
+        jacobian=gal_jacob,                                                      
+        psf=psf_obs,                                                             
+        noise=noise_img                                                          
+    )                                                                            
+    
+    return gal_obs
+
+
+def fit_shapes_sp(rng, nepoch, scale, obs, stamp, boot):
 
     # Create (empty) flag arrays
     for iepoch in range(nepoch):
@@ -316,16 +356,19 @@ def fit_shapes_sp(rng, nepoch, scale, stamp, boot):
     stamp.rescale_weights = False
     #stamp.megacam_flip = True
 
-    gal_obs_list = ngmix.ObsList()
+    gal_obs_list = ngmix.observation.ObsList()
+    #gal_obs_list = ngmix.ObsList()
     # Call ShapePipe ngmix functions 
     for n_e in range(nepoch):
         gal_obs = spng._make_ngmix_observation(
+        #gal_obs = my_make_ngmix_observation(
             stamp.gals[n_e],
             stamp.weights[n_e],
             stamp.psfs[n_e],
             stamp.jacobs[n_e],
             stamp.noise_ims[n_e]
         )
+        #gal_obs = obs[n_e]
         gal_obs_list.append(gal_obs)
 
     res, obsdict = boot.go(gal_obs_list)
@@ -503,7 +546,6 @@ def make_data(rng, noise, psf, psf_obs, wcs, dx, dy, g1, g2, stamp_size, profile
     ngmix.Observation, pars dict
 
     """
-
     obj0 = model_func(profile, g1, g2, dx, dy, flux, gal_hlr)
     
     obj = galsim.Convolve(psf, obj0)

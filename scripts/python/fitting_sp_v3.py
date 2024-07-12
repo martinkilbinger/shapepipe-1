@@ -76,16 +76,22 @@ def main():
     n_run = 5
 
     with open("T.txt", "w") as f:
-        print("# Flux SNR_sp T_sp T_err_sp SNR_ng T_ng T_ng_err", file=f)
+        print("# Flux SNR_sp T_sp T_err_sp SNR_ng T_ng T_ng_err R11_sp R22_sp R11_nng R22_ng", file=f)
         
         for flux in flux_arr:
             results = run_object(args.seed, scale, args.noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run)
             
             for i_run in range(n_run):
+                R11 = {}
+                R22 = {}
+                for key in ("sp", "ng"):
+                    R11[key], R22[key] = get_Rii(results[key][i_run])
+                    
                 print(
                     f"{flux} {results['sp'][i_run]['noshear']['s2n']} {results['sp'][i_run]['noshear']['T']:g}"
                     + f" {results['sp'][i_run]['noshear']['T_err']:g}"
-                    + f" {results['ng'][i_run]['noshear']['s2n']} {results['ng'][i_run]['noshear']['T']:g} {results['ng'][i_run]['noshear']['T_err']:g} ",
+                    + f" {results['ng'][i_run]['noshear']['s2n']} {results['ng'][i_run]['noshear']['T']:g} {results['ng'][i_run]['noshear']['T_err']:g} "
+                    + f" {R11['ng']} {R22['ng']} {R11['ng']} {R22['ng']}",
                     file=f,
                 )
 
@@ -627,9 +633,7 @@ def print_results(res, obsdict, key, obj_pars):
         obj_pars['g2'], res['noshear']['g'][1], res['noshear']['g_err'][1]*3,
     ))
 
-    step = 0.01
-    R11 = (res["1p"]["g"][0] - res["1m"]["g"][0]) / (2 * step)
-    R22 = (res["2p"]["g"][1] - res["2m"]["g"][1]) / (2 * step)
+    R11, R22 = get_Rii(res)
     print(f"R11 = {R11:g}, R22 = {R22:g}")
     print(f"T_psf = {obj_pars['T_psf']:g} arsec^2")
 
@@ -640,6 +644,14 @@ def print_results(res, obsdict, key, obj_pars):
     )
     print()
 
+    
+def get_Rii(res):
+
+    step = 0.01
+    R11 = (res["1p"]["g"][0] - res["1m"]["g"][0]) / (2 * step)
+    R22 = (res["2p"]["g"][1] - res["2m"]["g"][1]) / (2 * step)
+
+    return R11, R22
 
 def get_args():
     

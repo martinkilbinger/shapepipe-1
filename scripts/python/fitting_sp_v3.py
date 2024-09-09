@@ -60,7 +60,7 @@ def main():
 
     # Galaxy profile and half-light radius
     profile = "PointSource"
-    gal_hlr = 0.0
+    gal_hlr = 0.0  # set to zero for point source
     g1 = -0.0002
     g2 = 0.0005
 
@@ -73,7 +73,7 @@ def main():
     psf_fwhm = 0.68
 
     # Number of runs per galaxy
-    n_run = 5
+    n_run = 25
 
     with open("T.txt", "w") as f:
         print("# Flux SNR_sp T_sp T_err_sp SNR_ng T_ng T_ng_err R11_sp R22_sp R11_nng R22_ng", file=f)
@@ -99,12 +99,6 @@ def main():
     
 
 def run_object(seed, scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run):
-
-    sigma = gal_hlr / np.sqrt(2 * np.log(2))
-    T = 2 * sigma ** 2
-
-    sigma_psf = psf_fwhm / (2 * np.sqrt(2 * np.log(2)))
-    T_psf = 2 * sigma_psf ** 2
 
     results = {}
     obsdicts = {}
@@ -137,7 +131,14 @@ def run_object(seed, scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs
         obsdicts["ng"].append(obsdict)
 
     # Print results
+    sigma = gal_hlr / np.sqrt(2 * np.log(2))
+    T = 2 * sigma ** 2
+
+    sigma_psf = psf_fwhm / (2 * np.sqrt(2 * np.log(2)))
+    T_psf = 2 * sigma_psf ** 2
+
     obj_pars = get_obj_pars(g1, g2, flux, T, T_psf, 0, 0)
+
     for i_run in range(n_run):
         for key in results:
             print_results(results[key][i_run], obsdicts[key][i_run], key, obj_pars)

@@ -41,7 +41,7 @@ def main():
     logging.log_command(args_arr, name="log_fitting_sp.txt")
 
     # Pixel scale in arcsec
-    scale = 0.187
+    scale = args.scale
     
     # Postage stamp size in pixel
     stamp_size = 51
@@ -672,6 +672,7 @@ def get_args():
     def_noise = 0.01
     def_n_epoch = 1
     def_psf_fwhm = 0.68
+    def_scale = 0.187
     def_gal_hlr = 0.5
     def_n_run = 25
     
@@ -685,6 +686,8 @@ def get_args():
                         help=f'noise for images, default is {def_noise}')
     parser.add_argument('--psf_fwhm', type=float, default=def_psf_fwhm,
                         help=f'PSF FWHM [arcsec], default is {def_psf_fwhm}')
+    parser.add_argument('--scale', type=float, default=def_scale,
+                        help=f'pixel scale [arcsec], default is {def_scale}')
     parser.add_argument('--gal_hlr', type=float, default=def_gal_hlr,
                         help=f'Galaxy half-light radius [arcsec], default is {def_gal_hlr}')
     parser.add_argument('--n_epoch', type=int, default=def_n_epoch,

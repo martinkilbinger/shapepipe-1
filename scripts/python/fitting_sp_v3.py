@@ -17,7 +17,11 @@ objects.
 
 import sys
 import numpy as np
-import matplotlib.pylab as plt
+
+try:
+    import matplotlib.pylab as plt
+except:
+    print("Error, matplotlib could not be imported, continuing...")
 
 import galsim
 import ngmix
@@ -25,11 +29,16 @@ from modopt.math.stats import sigma_mad
 from shapepipe.modules.ngmix_package import ngmix as spng
 from shapepipe.modules.ngmix_package import postage_stamp as spng_ps
 
+from cs_util import logging
+
 
 def main():
 
     print(" === fitting_sp_v3.py ===")
     args = get_args()
+
+    args_arr = [(key, value) for key, value in vars(args).items()]
+    logging.log_command(args_arr, name="log_fitting_sp.txt")
 
     # Pixel scale in arcsec
     scale = 0.187
@@ -38,11 +47,10 @@ def main():
     stamp_size = 51
 
     # Number of epochs
-    nepoch = 1
+    nepoch = args.n_epoch
 
-    # Object's flux
-    #flux_arr = [1, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25]
-    flux_arr = [1, 2, 3, 5, 8, 10]
+    # Object's flux, apparently per epoch
+    flux_arr = [3, 6, 12, 20, 30] / np.sqrt(nepoch)
 
     if args.wcs == "weird":
         dudx = -0.00105142719975775
@@ -58,58 +66,72 @@ def main():
         raise ValueError(f"WCS type {args.wcs} not implemented")
     wcs = galsim.JacobianWCS(dudx, dudy, dvdx, dvdy)
 
+
+    # PSF Full-width half maximum, in arcsec
+    psf_fwhm = args.psf_fwhm
+
     # Galaxy profile and half-light radius
-    profile = "PointSource"
-    gal_hlr = 0.0  # set to zero for point source
-    g1 = -0.0002
-    g2 = 0.0005
+    profile = args.profile
 
-    #profile = "Gaussian"
-    #gal_hlr = 0.5
-    #g1 = -0.02
-    #g2 = 0.05
-
-    # PSF full width half maximum in arcsec
-    psf_fwhm = 0.68
+    if profile == "PointSource":
+        gal_hlr = 0.0  # set to zero for point source
+        g1 = -0.0002
+        g2 = 0.0005
+    elif profile in ("Gaussian", "Exponential"):
+        gal_hlr = args.gal_hlr
+        g1 = -0.02
+        g2 = 0.05
 
     # Number of runs per galaxy
-    n_run = 25
+    n_run = args.n_run
+
+    pipelines = ["sp"]
 
     with open("T.txt", "w") as f:
-        print("# Flux SNR_sp T_sp T_err_sp SNR_ng T_ng T_ng_err R11_sp R22_sp R11_nng R22_ng", file=f)
+        print("# Flux ", file=f)
+        for key in pipelines:
+            print(f"SNR_{key} T_{key} T_err_{key}", file=f, end=" ")
+        for key in pipelines:
+            print(f"R11_{key} R22_{key}", file=f)
         
         for flux in flux_arr:
-            results = run_object(args.seed, scale, args.noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run)
+            results = run_object(scale, args.noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run, pipelines, seed=args.seed)
             
             for i_run in range(n_run):
                 R11 = {}
                 R22 = {}
-                for key in ("sp", "ng"):
+                for key in pipelines:
                     R11[key], R22[key] = get_Rii(results[key][i_run])
                     
-                print(
-                    f"{flux} {results['sp'][i_run]['noshear']['s2n']} {results['sp'][i_run]['noshear']['T']:g}"
-                    + f" {results['sp'][i_run]['noshear']['T_err']:g}"
-                    + f" {results['ng'][i_run]['noshear']['s2n']} {results['ng'][i_run]['noshear']['T']:g} {results['ng'][i_run]['noshear']['T_err']:g} "
-                    + f" {R11['ng']} {R22['ng']} {R11['ng']} {R22['ng']}",
-                    file=f,
-                )
+                print(f"{flux}", file=f, end=" ")
+                for key in pipelines:
+                    print(
+                        f"{results[key][i_run]['noshear']['s2n']} {results[key][i_run]['noshear']['T']:g}"
+                        + f" {results[key][i_run]['noshear']['T_err']:g}",
+                        file=f,
+                        end=" ",
+                    )
+                for key in pipelines:
+                    print(f" {R11[key]} {R22[key]}", file=f)
 
     return 0
     
 
-def run_object(seed, scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run):
+def run_object(scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run, pipelines, seed=None):
 
     results = {}
     obsdicts = {}
-    pipelines = ["sp", "ng"]
     for key in pipelines:
         results[key] = []
         obsdicts[key] = []
 
-    rng = np.random.RandomState(seed)
+    rng = np.random.default_rng(seed)
     prior = get_prior(rng=rng, scale=scale)
     boot = get_bootstrap(rng, prior, flux)
+
+
+    rng_sp = np.random.default_rng(seed)
+    rng_np = np.random.default_rng(seed)
 
     # Run shape measurement pipelines
     for i_run in range(n_run):
@@ -119,16 +141,14 @@ def run_object(seed, scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs
         stamp, obs = make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs, profile, psf_fwhm, gal_hlr=gal_hlr)
 
         # Fit shape using ShapePipe ngmix module
-        rng = np.random.RandomState(seed)
-        res, obsdict = fit_shapes_sp(rng, nepoch, scale, obs, stamp, boot)
+        res, obsdict = fit_shapes_sp(rng_sp, nepoch, scale, obs, stamp, boot)
         results["sp"].append(res)
         obsdicts["sp"].append(obsdict)
 
         # Fit shape using ngmix package
-        rng = np.random.RandomState(seed)
-        res, obsdict = fit_shapes_ngmix(rng, nepoch, obs, boot)
-        results["ng"].append(res)
-        obsdicts["ng"].append(obsdict)
+        #res, obsdict = fit_shapes_ngmix(rng_np, nepoch, obs, boot)
+        #results["ng"].append(res)
+        #obsdicts["ng"].append(obsdict)
 
     # Print results
     sigma = gal_hlr / np.sqrt(2 * np.log(2))
@@ -144,10 +164,12 @@ def run_object(seed, scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs
             print_results(results[key][i_run], obsdicts[key][i_run], key, obj_pars)
 
     summary = summary_runs_all(results)
-    #print(summary)
 
+    print("print bias")
     print_bias(summary, obj_pars)
-    plot_g1g2(summary, obj_pars)
+    print("print bias done")
+    if False:
+        plot_g1g2(summary, obj_pars)
 
     return results
 
@@ -612,15 +634,6 @@ def get_obj_pars(g1, g2, flux, T, T_psf, dx, dy):
 def print_results(res, obsdict, key, obj_pars):
 
     print(f"===== results {key} =====")
-    #print(obj_pars)
-    #print(res['noshear']['pars'])
-    #print('obs image shape', obsdict['noshear'][0].image.shape)
-    #print('obs image sum', obsdict['noshear'][0].image.sum())
-
-    #print('obs noise std', obsdict['noshear'][0].noise.std())
-    #print('obs weight std', obsdict['noshear'][0].weight.std())
-    #print(f"obs weight sum {obsdict['noshear'][0].weight.sum():.2e}")
-    #print('obs weight[0[0]', obsdict['noshear'][0].weight[0][0])
     print('S/N:', res['noshear']['s2n'])
     print('true flux: %g meas flux: %g +/- %g (99.7%% conf)' % (
         obj_pars['flux'], res['noshear']['flux'], res['noshear']['flux_err']*3,
@@ -657,17 +670,31 @@ def get_Rii(res):
 def get_args():
     
     def_noise = 0.01
+    def_n_epoch = 1
+    def_psf_fwhm = 0.68
+    def_gal_hlr = 0.5
+    def_n_run = 25
     
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--seed', type=int, default=42,
+    parser.add_argument('--seed', type=int, default=None,
                         help='seed for rng')
     parser.add_argument('--show', action='store_true',
                         help='show plot comparing model and data')
     parser.add_argument('--noise', type=float, default=def_noise,
                         help=f'noise for images, default is {def_noise}')
+    parser.add_argument('--psf_fwhm', type=float, default=def_psf_fwhm,
+                        help=f'PSF FWHM [arcsec], default is {def_psf_fwhm}')
+    parser.add_argument('--gal_hlr', type=float, default=def_gal_hlr,
+                        help=f'Galaxy half-light radius [arcsec], default is {def_gal_hlr}')
+    parser.add_argument('--n_epoch', type=int, default=def_n_epoch,
+                        help=f'number of epochs. default is {def_n_epoch}')
+    parser.add_argument('--n_run', type=int, default=def_n_run,
+                        help=f'number of runs. default is {def_n_run}')
+    parser.add_argument('--profile', type=str, default="Gaussian",
+                        help="Object profile, allowed are 'PointSource', 'Gaussian' (default)")
     parser.add_argument('--wcs', type=str, default="weird",
-                        help="WCS type, allower are 'diagonal', 'weird' (default)")
+                        help="WCS type, allowed are 'diagonal', 'weird' (default)")
     return parser.parse_args()
 
 

@@ -52,20 +52,7 @@ def main():
     # Object's flux, apparently per epoch
     flux_arr = [3, 6, 12, 20, 30] / np.sqrt(nepoch)
 
-    if args.wcs == "weird":
-        dudx = -0.00105142719975775
-        dudy = 0.16467706437987895
-        dvdx = 0.15681099855148395
-        dvdy = -0.0015749298342502371
-    elif args.wcs == "diagonal":
-        dudx = scale
-        dudy = 0
-        dvdx = 0
-        dvdy = scale
-    else:
-        raise ValueError(f"WCS type {args.wcs} not implemented")
-    wcs = galsim.JacobianWCS(dudx, dudy, dvdx, dvdy)
-
+    wcs = set_wcs(args.wcs, scale)
 
     # PSF Full-width half maximum, in arcsec
     psf_fwhm = args.psf_fwhm
@@ -85,51 +72,106 @@ def main():
     # Number of runs per galaxy
     n_run = args.n_run
 
-    pipelines = ["sp"]
+    # Allowed are "sp", "ng"
+    pipelines = ["sp", "ng"]
 
     with open("T.txt", "w") as f:
-        print("# Flux ", file=f)
-        for key in pipelines:
-            print(f"SNR_{key} T_{key} T_err_{key}", file=f, end=" ")
-        for key in pipelines:
-            print(f"R11_{key} R22_{key}", file=f)
-        
+        print_header_to_file(f, pipelines)
+       
         for flux in flux_arr:
-            results = run_object(scale, args.noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run, pipelines, seed=args.seed)
+            results, aux = run_object(scale, args.noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run, pipelines, seed=args.seed)
+            print_results_to_file(f, pipelines, flux, results, aux, n_run)
             
-            for i_run in range(n_run):
-                R11 = {}
-                R22 = {}
-                for key in pipelines:
-                    R11[key], R22[key] = get_Rii(results[key][i_run])
-                    
-                print(f"{flux}", file=f, end=" ")
-                for key in pipelines:
-                    print(
-                        f"{results[key][i_run]['noshear']['s2n']} {results[key][i_run]['noshear']['T']:g}"
-                        + f" {results[key][i_run]['noshear']['T_err']:g}",
-                        file=f,
-                        end=" ",
-                    )
-                for key in pipelines:
-                    print(f" {R11[key]} {R22[key]}", file=f)
-
     return 0
+
+ 
+def set_wcs(wcs, scale):
+    """Set Wcs.
     
+    Set the World Coordinate System (WCS) based on the specified type.
+
+    This function configures the WCS transformation parameters based on the provided type.
+    It supports two types: 'weird' and 'diagonal'.
+
+    Parameters
+    ----------
+        wcs: str
+            WCS type
+        scale: float
+            pixel scale in arcsec
+    
+    Returns
+    --------
+    galsim.JacobianWCS
+        WCS information
+    """
+    if wcs == "weird":
+        dudx = -0.00105142719975775
+        dudy = 0.16467706437987895
+        dvdx = 0.15681099855148395
+        dvdy = -0.0015749298342502371
+    elif wcs == "diagonal":
+        dudx = scale
+        dudy = 0
+        dvdx = 0
+        dvdy = scale
+    else:
+        raise ValueError(f"WCS type {wcs} not implemented")
+    return galsim.JacobianWCS(dudx, dudy, dvdx, dvdy)
+
+   
+def print_header_to_file(f, pipelines):
+
+    print("# Flux SNR_pix SNR_pix2", file=f, end=" ")
+    for key in pipelines:
+        print(f"SNR_pix_{key} flux_{key} flux_err_{key} SNR_{key} T_{key} T_err_{key}", file=f, end=" ")
+    for key in pipelines:
+        print(f"R11_{key} R22_{key}", file=f, end=" ")
+    print(file=f)
+    
+
+def print_results_to_file(f, pipelines, flux, results, aux, n_run):
+
+    for i_run in range(n_run):
+        print(f"{flux}", file=f, end=" ")
+        print(f"{aux['snr_pix'][i_run]:.5g}", file=f, end=" ")
+        print(f"{aux['snr_pix2'][i_run]:.5g}", file=f, end=" ")
+
+        for key in pipelines:
+            print(
+                f"{aux[f'snr_{key}'][i_run]}"
+                + f" {results[key][i_run]['noshear']['flux']:.5g}"
+                + f" {results[key][i_run]['noshear']['flux_err']:.5g}"
+                + f" {results[key][i_run]['noshear']['s2n']:.5g}"
+                + f" {results[key][i_run]['noshear']['T']:.5g}"
+                + f" {results[key][i_run]['noshear']['T_err']:.5g}",
+                file=f,
+                end=" ",
+            )
+        for key in pipelines:
+            R11, R22 = get_Rii(results[key][i_run])
+            print(f"{R11:.5g} {R22:.5g}", file=f, end=" ")
+        print(file=f)
+
 
 def run_object(scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stamp_size, nepoch, n_run, pipelines, seed=None):
 
     results = {}
+    aux = {}
     obsdicts = {}
     for key in pipelines:
         results[key] = []
         obsdicts[key] = []
+        aux[f"snr_{key}"] = []
+    aux["snr_pix"] = []
+    aux["snr_pix2"] = []
 
     rng = np.random.default_rng(seed)
     prior = get_prior(rng=rng, scale=scale)
-    boot = get_bootstrap(rng, prior, flux)
+    boot, fitter = get_bootstrap(rng, prior, flux)
 
 
+    # Initialize random generator for both pipelines with same seed
     rng_sp = np.random.default_rng(seed)
     rng_np = np.random.default_rng(seed)
 
@@ -138,17 +180,23 @@ def run_object(scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stam
 
         print(f"===== Run {i_run}/{n_run} =====")
 
-        stamp, obs = make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs, profile, psf_fwhm, gal_hlr=gal_hlr)
+        stamp, obs, snr_pix, snr_pix2 = make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs, profile, psf_fwhm, gal_hlr=gal_hlr)
+        aux["snr_pix"].append(snr_pix)
+        aux["snr_pix2"].append(snr_pix2)
 
         # Fit shape using ShapePipe ngmix module
-        res, obsdict = fit_shapes_sp(rng_sp, nepoch, scale, obs, stamp, boot)
-        results["sp"].append(res)
-        obsdicts["sp"].append(obsdict)
+        if "sp" in pipelines:
+            res, obsdict, s2n = fit_shapes_sp(rng_sp, nepoch, scale, obs, stamp, boot, fitter)
+            results["sp"].append(res)
+            obsdicts["sp"].append(obsdict)
+            aux["snr_sp"].append(s2n)
 
         # Fit shape using ngmix package
-        #res, obsdict = fit_shapes_ngmix(rng_np, nepoch, obs, boot)
-        #results["ng"].append(res)
-        #obsdicts["ng"].append(obsdict)
+        if "ng" in pipelines:
+            res, obsdict, s2n = fit_shapes_ngmix(rng_np, nepoch, obs, boot)
+            results["ng"].append(res)
+            obsdicts["ng"].append(obsdict)
+            aux["snr_ng"].append(s2n)
 
     # Print results
     sigma = gal_hlr / np.sqrt(2 * np.log(2))
@@ -162,6 +210,7 @@ def run_object(scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stam
     for i_run in range(n_run):
         for key in results:
             print_results(results[key][i_run], obsdicts[key][i_run], key, obj_pars)
+            pass
 
     summary = summary_runs_all(results)
 
@@ -171,12 +220,12 @@ def run_object(scale, noise, profile, flux, gal_hlr, psf_fwhm, g1, g2, wcs, stam
     if False:
         plot_g1g2(summary, obj_pars)
 
-    return results
+    return results, aux
 
 
 def print_bias(summary, obj_pars):
 
-    print(f"Residual shear biases:")
+    print("Residual shear biases:")
     print("code dg1     dg1/g1   dg2     dg2/g2")
     print("------------------------------------")
     for key in summary:
@@ -257,7 +306,10 @@ def make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs, profile
     prior = get_prior(rng=rng, scale=scale)
     obs = []
 
-    for iepoch in range(nepoch):
+    snr_pix_sum = 0
+    snr_pix2_sum = 0
+
+    for _ in range(nepoch):
         this_psf, this_psf_obs, this_psf_im = make_psf(rng, stamp_size, wcs, psf_fwhm)
 
         #dy = dx = 0
@@ -271,6 +323,23 @@ def make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs, profile
         if any(this_psf_im.shape != stamp_size_xy):
             raise ValueError(f"psf image has wrong size: {this_psf_im.shape}")
 
+        # Compute pixel-sum SNR, see ngmix:test_observation.py:test_observation_s2n
+        snr_pix = np.sum(this_obs.image) / np.sqrt(np.sum(1.0/this_wt))
+        snr_pix_sum += snr_pix ** 2
+
+        # Compute pixel-square sum SNR, see ngmix.gmix_nb:get_loglike
+        # or gmix_nb:get_model_s2n_sum
+        # but with model -> pixel value
+        s2n_numer = 0
+        #s2n_denom = 0
+        for index in np.ndindex(this_obs.image.shape):
+            idx, jdx = index
+            s2n_numer += this_obs.image[idx, jdx] ** 2 * this_wt[idx, jdx]
+            #s2n_denom += this_obs.image[idx, jdx] ** 2 * this_wt[idx, jdx]
+        #snr_pix2 = s2n_numer / np.sqrt(s2n_denom)
+        snr_pix2 = np.sqrt(s2n_numer)
+        snr_pix2_sum += snr_pix2 ** 2
+
         # obs used in ngmix package
         obs.append(this_obs)
         stamp.gals.append(this_obs.image)
@@ -279,7 +348,10 @@ def make_stamp(rng, nepoch, scale, flux, noise, stamp_size, g1, g2, wcs, profile
         stamp.jacobs.append(wcs)
         stamp.noise_ims.append(this_noise)
 
-    return stamp, obs
+    snr_pix_sum = np.sqrt(snr_pix_sum)
+    snr_pix2_sum = np.sqrt(snr_pix2_sum)
+
+    return stamp, obs, snr_pix_sum, snr_pix2_sum
 
 
 def get_bootstrap(rng, prior, flux):
@@ -318,13 +390,15 @@ def get_bootstrap(rng, prior, flux):
     )
 
     # this bootstraps the process, first fitting psfs then the object
-    return ngmix.metacal.MetacalBootstrapper(
+    metacal_bootstrapper = ngmix.metacal.MetacalBootstrapper(
         runner=runner,
         psf_runner=psf_runner,
         rng=rng,
         ignore_failed_psf=True,
         psf='fitgauss',
     )
+
+    return metacal_bootstrapper, fitter
 
 
 def my_make_ngmix_observation(gal,weight,psf,wcs,noise_img):                       
@@ -374,7 +448,7 @@ def my_make_ngmix_observation(gal,weight,psf,wcs,noise_img):
     return gal_obs
 
 
-def fit_shapes_sp(rng, nepoch, scale, obs, stamp, boot):
+def fit_shapes_sp(rng, nepoch, scale, obs, stamp, boot, fitter):
 
     # Create (empty) flag arrays
     for iepoch in range(nepoch):
@@ -402,7 +476,16 @@ def fit_shapes_sp(rng, nepoch, scale, obs, stamp, boot):
 
     res, obsdict = boot.go(gal_obs_list)
 
-    return res, obsdict
+    # ngmix observational pixel-sum SNR, equal to aux["snr_sp"]
+    s2n_pix = gal_obs_list.get_s2n()
+
+    # Model SNR, how can we get it?
+    #fit_model = fitter._make_fit_model(obs=gal_obs_list, guess=[5, 0, 0, 0.25, 0, 0.25])
+    #gmix = fit_model.get_gmix()
+    #s2n = gmix.get_model_s2n(obs)
+    #print("model s2n = ", s2n)
+
+    return res, obsdict, s2n_pix
 
 
 def fit_shapes_ngmix(rng, nepoch, obs, boot):
@@ -425,7 +508,10 @@ def fit_shapes_ngmix(rng, nepoch, obs, boot):
 
         images.compare_images(obs.image, imfit)
 
-    return res, obsdict
+    # ngmix observational pixel-sum SNR, equal to aux["snr_ng"]
+    s2n_pix = gal_obs_list.get_s2n()
+
+    return res, obsdict, s2n_pix
 
 
 # Same function as Ngmix.get_prior()
@@ -463,14 +549,12 @@ def get_prior(*, rng, scale, T_range=None, F_range=None, nband=None):
     if nband is not None:
         F_prior = [F_prior]*nband
 
-    prior = ngmix.joint_prior.PriorSimpleSep(
+    return ngmix.joint_prior.PriorSimpleSep(
         cen_prior=cen_prior,
         g_prior=g_prior,
         T_prior=T_prior,
         F_prior=F_prior,
     )
-
-    return prior
 
 
 def make_psf(rng, stamp_size, wcs, psf_fwhm):
@@ -579,10 +663,6 @@ def make_data(rng, noise, psf, psf_obs, wcs, dx, dy, g1, g2, stamp_size, profile
     
     obj = galsim.Convolve(psf, obj0)
 
-    # MKDEBUG shrink obs for ps testing
-    #print("MKDEBUG shrink")
-    #obj = obj.dilate(0.99)
-
     im = obj.drawImage(nx=stamp_size, ny=stamp_size, wcs=wcs).array
 
     # add noise
@@ -617,7 +697,7 @@ def make_data(rng, noise, psf, psf_obs, wcs, dx, dy, g1, g2, stamp_size, profile
 
 def get_obj_pars(g1, g2, flux, T, T_psf, dx, dy):
 
-    obj_pars = {
+    return {
         'g1': g1,
         'g2': g2,
         'flux': flux,
@@ -626,9 +706,6 @@ def get_obj_pars(g1, g2, flux, T, T_psf, dx, dy):
         'dx': dx,
         'dy': dy,
     }
-
-    return obj_pars
-
 
 
 def print_results(res, obsdict, key, obj_pars):

@@ -1,17 +1,53 @@
 # Post-processing
 
-This page shows all required steps of post-processing the results from one or
-more `ShapePipe` runs. Post-processing combines various individual `ShapePipe`
-output files, and creates joint results, for example combining individual tile
-catalogues into a large sky area. The output of post-processing is a joint _shape
-catalogue_, containing all required information to create a calibrated shear
-catalogue via _metacalibration_), a joint star catalogue, and PSF diagnostic plots.
+This page shows the required steps for post-processing the results from one or
+more `ShapePipe` runs. Post-processing includes tow following tasks:  
+1. Merge `ShapePipe` output files and create joint catalogues over a large sky patch area.
+   The output contains all required information to create a calibrated shear catalogue via
+   _metacalibration_).
+2. Create merged PSF and star catalogues in pixel and WCS coordinates.
+3. Compute basic PSF diagnostics such as focal-plane residual plots and rho-statistics. 
 
+1. Merge `ShapePipe` output files.
 
+The script to peform this task is `create_final_cat.py`. An example call from the base directory, in
+which the patch subdirectories `P?` are found, is
+```bash
+create_final_cat.py -m final_cat_P3.hdf5 -i P3 -p P3/cfis/final_cat.param -o P3/n_tiles_final.txt -P 3 -v
+---
+This creates the merged file `final_cat_P3.hdf5' from all final `ShapePipe` catalogues found (recursively)
+in input directory `P3`. Only columns are merged indicated in the parameter file `P3/cfis/final_cat.param`.
+The number of merged tiles is written to `P3/n_tiles_final.txt`.
 
+2. Create PSF and star catalogues.
+
+First, project PSF and star quantities measures in pixel coordinates to spherical world (WCS) coordinates, using
+`convert_psf_pix2world.py`. For example, from the same base directory as above:
+```bash
+mkdir star_cat
+cd star_cat
+convert_psf_pix2world.py -i .. -P 3 -v -p psfex -m merge 
+```
+converts all star and PSF catalogues found in ../P3/output.
+
+Second, create a single output directory for `ShapePipe` with symbolic links to all projected PSF and star files with `combin_runs.bash`.
+For example,
+```bash
+cd star_cat/P3
+combine_runs.bash -p psfex -c psf_conv
+```
+In the case of UNIONS `v1.4`, only one symbolic link is created.
+
+Third, create the merged PSF and star catalogues by running the `ShapePipe` module `merge_starcat_runner`. For example,
+cd star_cat/P3
+```bash
+export SP_RUN=`pwd`
+shapepipe_run -c config_Ms_psfex_conv.ini
 ---
 
-If main ShapePipe processing happened at the old canfar VM system (e.g. CFIS v0 and v1), go
+
+
+If the main ShapePipe processing happened at the old canfar VM system (e.g. CFIS v0 and v1), go
 [here](vos_retrieve.md) for details how to retrieve the ShapePipe output files.
 
 ---

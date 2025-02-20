@@ -8,7 +8,7 @@ more `ShapePipe` runs. Post-processing includes tow following tasks:
 2. Create merged PSF and star catalogues in pixel and WCS coordinates.
 3. Compute basic PSF diagnostics such as focal-plane residual plots and rho-statistics. 
 
-1. Merge `ShapePipe` output files.
+## 1. Merge `ShapePipe` output files.
 
 The script to peform this task is `create_final_cat.py`. An example call from the base directory, in
 which the patch subdirectories `P?` are found, is
@@ -20,7 +20,7 @@ This creates the merged file `final_cat_P3.hdf5' from all final `ShapePipe` cata
 in input directory `P3`. Only columns are merged indicated in the parameter file `P3/cfis/final_cat.param`.
 The number of merged tiles is written to `P3/n_tiles_final.txt`.
 
-2. Create PSF and star catalogues.
+## 2. Create PSF and star catalogues.
 
 First, project PSF and star quantities measures in pixel coordinates to spherical world (WCS) coordinates, using
 `convert_psf_pix2world.py`. For example, from the same base directory as above:
@@ -45,8 +45,6 @@ cd star_cat/P3
 export SP_RUN=`pwd`
 shapepipe_run -c config_Ms_psfex_conv.ini
 ---
-
-
 
 If the main ShapePipe processing happened at the old canfar VM system (e.g. CFIS v0 and v1), go
 [here](vos_retrieve.md) for details how to retrieve the ShapePipe output files.

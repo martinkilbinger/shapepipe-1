@@ -11,7 +11,7 @@ more `ShapePipe` runs. Post-processing includes tow following tasks:
 ## 1. Merge `ShapePipe` output files.
 
 The script to peform this task is `create_final_cat.py`. An example call from the base directory, in
-which the patch subdirectories `P?` are found, is
+which the patch subdirectories `P3` are found, is
 ```bash
 create_final_cat.py -m final_cat_P3.hdf5 -i P3 -p P3/cfis/final_cat.param -o P3/n_tiles_final.txt -P 3 -v
 ```

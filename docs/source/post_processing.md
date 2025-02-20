@@ -37,6 +37,7 @@ For example,
 cd star_cat/P3
 combine_runs.bash -p psfex -c psf_conv
 ```
+
 In the case of UNIONS `v1.4`, only one symbolic link is created.
 
 Third, create the merged PSF and star catalogues by running the `ShapePipe` module `merge_starcat_runner`. For example,

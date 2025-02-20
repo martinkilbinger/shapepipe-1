@@ -45,7 +45,15 @@ cd star_cat/P3
 ```bash
 export SP_RUN=`pwd`
 shapepipe_run -c config_Ms_psfex_conv.ini
----
+```
+
+## 3. Compute basic diagnostics
+
+Basic diagnostics are created with the `mccd_plots_runner` module (for both `psfex` and `MCCD` PSF models). Type
+```bash
+export SP_RUN=`pwd`
+shapepipe_run -c config_Pl_psfex.ini
+```
 
 If the main ShapePipe processing happened at the old canfar VM system (e.g. CFIS v0 and v1), go
 [here](vos_retrieve.md) for details how to retrieve the ShapePipe output files.

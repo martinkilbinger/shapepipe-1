@@ -14,7 +14,8 @@ The script to peform this task is `create_final_cat.py`. An example call from th
 which the patch subdirectories `P?` are found, is
 ```bash
 create_final_cat.py -m final_cat_P3.hdf5 -i P3 -p P3/cfis/final_cat.param -o P3/n_tiles_final.txt -P 3 -v
----
+```
+
 This creates the merged file `final_cat_P3.hdf5' from all final `ShapePipe` catalogues found (recursively)
 in input directory `P3`. Only columns are merged indicated in the parameter file `P3/cfis/final_cat.param`.
 The number of merged tiles is written to `P3/n_tiles_final.txt`.

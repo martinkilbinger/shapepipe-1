@@ -6,6 +6,9 @@ YWIN_WORLD
 # Can maybe be removed.
 TILE_ID
 
+# Object number, for multi-band cat IDs; only unique for given tile
+NUMBER
+
 # flags
 FLAGS
 IMAFLAGS_ISO

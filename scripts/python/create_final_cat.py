@@ -27,41 +27,37 @@ from cs_util import args as cs_args
 from cs_util import logging
 
 
-def set_params_from_command_line(args):                               
-    """Set Params From Command Line.                                        
-                                                                                
-    """                                                                     
-    _params, _short_options, _types, _help_strings = (
-        params_default()
-    )
-    
-    # Read command line options                                             
-    options = cs_args.parse_options(                                        
-        _params,                                                       
-        _short_options,                                                
-        _types,                                                        
-        _help_strings,                                                 
-    )                                                                       
+def set_params_from_command_line(args):
+    """Set Params From Command Line."""
+    _params, _short_options, _types, _help_strings = params_default()
 
-    # Update parameter values from options                                  
-    for key in options:                                               
-        _params[key] = options[key]                           
-                                                                                
-    del options                                                             
-                                                                                
-    # Save calling command                                                  
+    # Read command line options
+    options = cs_args.parse_options(
+        _params,
+        _short_options,
+        _types,
+        _help_strings,
+    )
+
+    # Update parameter values from options
+    for key in options:
+        _params[key] = options[key]
+
+    del options
+
+    # Save calling command
     logging.log_command(args)
 
     return _params
 
 
-def params_default():                                                   
-    """Params Default.                                                      
-                                                                                
-    Set default parameter values.                                           
-                                                                                
-    """                                                                     
-    _params = {                                                        
+def params_default():
+    """Params Default.
+
+    Set default parameter values.
+
+    """
+    _params = {
         "input_root_dir": ".",
         "merged_cat_path": "final_cat.hdf5",
         "param_path": None,
@@ -72,20 +68,20 @@ def params_default():
         "ID": None,
         "single_op": None,
     }
-    _short_options = {                                                 
-        "input_root_dir": "-i",                                           
+    _short_options = {
+        "input_root_dir": "-i",
         "merged_cat_path": "-m",
         "param_path": "-p",
         "patch": "-P",
         "list_only": "-l",
         "output_summary": "-o",
         "single_op": "-s",
-    }                                                                       
-    _types = {                                     
-        "hdu_num": "int", 
+    }
+    _types = {
+        "hdu_num": "int",
         "list_only": "bool",
-    }                                                                       
-    _help_strings = {                                                  
+    }
+    _help_strings = {
         "input_root_dir": "input root_dir for tile catalogues, default={}",
         "merged_cat_path": "merged catalogue path (hdf5 file), default={}",
         "param_path": "parameter file path, if not given use all columns, default={}",
@@ -141,17 +137,17 @@ def read_param_file(path, verbose=False):
         print(" into merged catalogue")
 
     param_list_unique = list(set(param_list))
-    
+
     if verbose:
         n = len(param_list) - len(param_list_unique)
         if n > 1:
             print("Removed {n} duplicate entries")
-    
+
     return param_list_unique
 
 
 def check_params(params):
- 
+
     if bool(params["ID"] is None) != bool(params["single_op"] is None):
         print("Both or none of the options 'ID' and 'single_op' need to be specified")
         return False
@@ -235,7 +231,7 @@ def print_list(params):
     with h5py.File(params["merged_cat_path"], "r") as hdf5_file:
 
         for patch in hdf5_file["patches"]:
-            #print(patch)
+            # print(patch)
             for id in hdf5_file[f"patches/{patch}"]:
                 n_tiles += 1
 
@@ -277,9 +273,7 @@ def get_patch_group(hdf5_file, patch, verbose=False):
 
 
 def read_data(fits_file, params):
-    """Read Data.
-
-    """
+    """Read Data."""
     with fits.open(fits_file) as hdu_list:
         try:
             data = hdu_list[params["hdu_num"]].data
@@ -306,9 +300,7 @@ def read_data(fits_file, params):
 
 
 def copy_data(param_list, extracted_data, dtype):
-    """Copy Data.
-
-    """
+    """Copy Data."""
     # Initialize new data structure
     structured_data = np.empty(
         len(extracted_data[param_list[0]]),
@@ -320,8 +312,9 @@ def copy_data(param_list, extracted_data, dtype):
         if not col in extracted_data:
             print(f"Column {col} not in file with ID {id}")
         structured_data[col] = extracted_data[col]
-    
-    #if isinstance(extracted_data[col][0], (np.ndarray, tuple, list)):
+
+    # if isinstance(extracted_data[col][0], (np.ndarray, tuple, list)):
+    # MKDEBUG: The following avoid writing multi-entry (2D) columns
     if False:
 
         # If multi-entry loop over entries
@@ -340,10 +333,10 @@ def copy_data(param_list, extracted_data, dtype):
 
 
 def process(params):
-    
+
     patch = rf"P{params['patch']}"
     patch_pattern = re.compile(patch)
-    
+
     # Define the nested path pattern for locating `.fits` files
     file_pattern = "output/run_sp_Mc_*/make_cat_runner/output/*.fits"
 
@@ -352,7 +345,7 @@ def process(params):
 
     n_added = 0
     IDs_added = []
-    
+
     # Open the HDF5 file (create it if it doesn't exist)
     if params["verbose"]:
         print(f"Initializing file {params['merged_cat_path']}")
@@ -364,14 +357,14 @@ def process(params):
             # Skip non-matching entries
             if not patch_pattern.fullmatch(patch):
                 continue
-            
+
             # Full path to patch
             patch_path = os.path.join(params["input_root_dir"], patch)
             if not os.path.isdir(patch_path):
                 if params["verbose"]:
                     print(f"Path {patch_path} not found, skipping")
                 continue
-        
+
             # Get hdf5 group for this patch
             patch_group = get_patch_group(hdf5_file, patch, params["verbose"])
 
@@ -386,11 +379,15 @@ def process(params):
                         print(f"Skipping {id} (already processed)")
                     continue
 
-                if id_pattern.match(id) and os.path.isdir(os.path.join(tile_runs_path, id)):
+                if id_pattern.match(id) and os.path.isdir(
+                    os.path.join(tile_runs_path, id)
+                ):
                     id_path = os.path.join(tile_runs_path, id)
-                
+
                     base_pattern = os.path.join(id_path, "output", "run_sp_Mc_*")
-                    all_matches = [d for d in glob.glob(base_pattern) if os.path.isdir(d)]
+                    all_matches = [
+                        d for d in glob.glob(base_pattern) if os.path.isdir(d)
+                    ]
                     if not all_matches:
                         if params["verbose"]:
                             print(f"Final cat for {id} not found, continuing")
@@ -398,19 +395,23 @@ def process(params):
                     newest_dir = max(all_matches, key=os.path.getmtime)
 
                     id_dash = re.sub("\.", "-", id)
-                    fits_file = f"{newest_dir}/make_cat_runner/output/final_cat-{id_dash}.fits"
+                    fits_file = (
+                        f"{newest_dir}/make_cat_runner/output/final_cat-{id_dash}.fits"
+                    )
 
                     # Exclude unsuccessful run without output FITS file
                     if not os.path.exists(fits_file):
                         if params["verbose"]:
                             print(f"Run without output file found for {id}, skipping")
                         continue
-                        
+
                     if True:
                         extracted_data, dtype = read_data(fits_file, params)
 
-                        structured_data = copy_data(params["param_list"], extracted_data, dtype)
-                        
+                        structured_data = copy_data(
+                            params["param_list"], extracted_data, dtype
+                        )
+
                         # Create a new dataset
                         try:
                             patch_group.create_dataset(
@@ -419,7 +420,9 @@ def process(params):
                                 dtype=dtype,
                             )
                         except:
-                            print(f"Error for {id}: Could not create dataset in group {patch}")
+                            print(
+                                f"Error for {id}: Could not create dataset in group {patch}"
+                            )
                             raise
 
                         n_added += 1
@@ -469,7 +472,7 @@ def single_action(params):
 
 
 def main(argv=None):
-    
+
     if argv is None:
         argv = sys.argv[0:]
     params = set_params_from_command_line(argv)
@@ -493,5 +496,5 @@ def main(argv=None):
     return 0
 
 
-if __name__ == "__main__":                                                      
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

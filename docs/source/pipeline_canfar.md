@@ -111,14 +111,6 @@ curl_canfar_local.sh -j 512 -f tile_numbers.txt -p $psf -N $OMP_NUM_THREADS
 # Run in parallel
 cat mc.txt | xargs -I {} -P 16 bash -c 'init_run_exclusive_canfar.sh -p psfex -j 512 -e {} --n_smp 1'
 
-# Combine all final cats in common output dir as links
-combine_runs.bash -c final -p psfex
-
-# Merge all final cats
-# (W3: 140GB RAM)
-# in /path/to/$psf
-patchnum=`tr $patch P ''`
-create_final_cat.py -m final_cat_$patch.hdf5 -i . -p $patch/cfis/final_cat.param -P $patchnum -o $patch/n_tiles_final.txt -v
 
 # Star catalogue
 combine_runs.bash  -p $psf -c psf
@@ -132,12 +124,7 @@ cd ../star_cat
 
 # Create files validation_psf_conv-<patchnum>-<idx>.fits
 # (for the v1.4 setup only one file)
- convert_psf_pix2world.py -i .. -P $patchnum -v
-
-# Combine previously created files as links within one SP run dir
-# (for the v1.4 setup only one link
-cd P$patch
-combine_runs.bash -p psfex -c psf_conv
+convert_psf_pix2world.py -i .. -P $patchnum -v
 
 # Merge all converted star catalogues and create final-starcat.fits
 export SP_RUN=`pwd`

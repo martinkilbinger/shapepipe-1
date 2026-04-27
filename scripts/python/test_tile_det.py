@@ -334,6 +334,89 @@ def compare_quantity(
     return fname
 
 
+def scatter_radec(tile_dirs, cfg, output_dir, flag_col_sx, flag_col_uc, verbose=False):
+    """Produce a RA/Dec scatter plot for all flag filters side by side.
+
+    Layout: n_tiles rows × n_filters columns.
+    Both sx and uc modes are overlaid with different colours/markers.
+
+    Returns the filename of the generated PNG.
+    """
+    col_ra_sx  = cfg.get("radec", "col_ra_sx")
+    col_dec_sx = cfg.get("radec", "col_dec_sx")
+    col_ra_uc  = cfg.get("radec", "col_ra_uc")
+    col_dec_uc = cfg.get("radec", "col_dec_uc")
+
+    filters   = cfg.get("comparison", "filters").split()
+    n_tiles   = len(tile_dirs)
+    n_filters = len(filters)
+
+    fig, axes = plt.subplots(
+        n_tiles, n_filters,
+        figsize=(4.0 * n_filters, 3.5 * n_tiles),
+        squeeze=False,
+    )
+
+    for row, tile_dir in enumerate(tile_dirs):
+        tile_id = os.path.basename(tile_dir)
+
+        for col, filt in enumerate(filters):
+            ax = axes[row][col]
+
+            for mode, col_ra, col_dec, flag_col, mode_label, color in [
+                ("sx", col_ra_sx, col_dec_sx, flag_col_sx, "SExtractor", "steelblue"),
+                ("uc", col_ra_uc, col_dec_uc, flag_col_uc, "UNIONS",     "tomato"),
+            ]:
+                try:
+                    path = find_sexcat(tile_dir, mode)
+                    data = read_ldac_objects(path)
+                    data = apply_flag_filter(data, flag_col, filt)
+
+                    missing = [c for c in (col_ra, col_dec) if c not in data.names]
+                    if missing:
+                        print(
+                            f"  WARNING: columns {missing} not in {path}",
+                            file=sys.stderr,
+                        )
+                        continue
+
+                    ra  = np.asarray(data[col_ra],  dtype=float)
+                    dec = np.asarray(data[col_dec], dtype=float)
+                    ax.scatter(
+                        ra, dec,
+                        s=1.0, color=color, marker=",", alpha=0.5,
+                        label=f"{mode_label}  N={len(ra):,}",
+                        rasterized=True,
+                    )
+                    if verbose:
+                        print(
+                            f"  {tile_id} {mode} {filt}: "
+                            f"{len(ra):,} objects  ({path})"
+                        )
+
+                except (FileNotFoundError, KeyError) as exc:
+                    print(f"  WARNING: {exc}", file=sys.stderr)
+
+            filt_label = FILTER_LABELS.get(filt, filt)
+            title = f"Tile {tile_id} — {filt_label}" if n_tiles > 1 else filt_label
+            ax.set_xlabel("RA (deg)", fontsize=8)
+            ax.set_ylabel("Dec (deg)", fontsize=8)
+            ax.set_title(title, fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.invert_xaxis()
+            ax.legend(fontsize=7, markerscale=20)
+
+    fig.suptitle("RA / Dec — sx vs uc", fontsize=10)
+    plt.tight_layout()
+
+    fname = "radec_scatter.png"
+    fpath = os.path.join(output_dir, fname)
+    plt.savefig(fpath, dpi=150)
+    plt.close()
+    print(f"  Saved {fpath}")
+    return fname
+
+
 def compare_tiles(tile_dirs, cfg, output_dir, verbose=False):
     """Run all comparisons defined in *cfg* and collect generated plot paths.
 
@@ -356,6 +439,14 @@ def compare_tiles(tile_dirs, cfg, output_dir, verbose=False):
             flag_col_sx, flag_col_uc, verbose=verbose,
         )
         all_plots.append((qty, label, fname))
+
+    if cfg.has_section("radec"):
+        print("\n  Quantity: RA/Dec scatter")
+        fname = scatter_radec(
+            tile_dirs, cfg, output_dir,
+            flag_col_sx, flag_col_uc, verbose=verbose,
+        )
+        all_plots.append(("radec_scatter", "RA / Dec scatter", fname))
 
     return all_plots
 
